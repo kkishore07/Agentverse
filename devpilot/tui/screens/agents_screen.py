@@ -289,7 +289,7 @@ class AgentsScreen(ModalScreen[None]):
         with Container(id="as-container"):
             with Horizontal(id="as-titlebar"):
                 yield Static("⚙  AGENT MANAGER", id="as-title")
-                yield Static("AgentVerse Autonomous Development Team", id="as-subtitle")
+                yield Static("DevPilot Autonomous Development Team", id="as-subtitle")
                 yield Button("✕ Close", id="as-close-btn")
             with VerticalScroll(id="as-scroll"):
                 for name, desc in self._registry.get_all().items():

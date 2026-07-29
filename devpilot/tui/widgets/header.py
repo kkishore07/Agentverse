@@ -1,16 +1,16 @@
 """
 tui/widgets/header.py
 ======================
-AgentVerseHeader — replaces Textual's generic Header widget.
+DevPilotHeader — replaces Textual's generic Header widget.
 
 Shows (left to right):
-  ● Logo pill        [  AgentVerse  ]
+  ● Logo pill        [  DevPilot  ]
   ● Workspace name   workspace/project
   ● Git branch       ⎇ main
   ● Model name       ◈ qwen2.5-coder
   ● Connection dot   ● Connected  /  ● Offline
   ● Mode badge       CHAT / TASK
-  ● Theme name       🎨 AgentVerse
+  ● Theme name       🎨 DevPilot
 
 All fields are reactive — assigning to them triggers an instant redraw.
 No rebuild, no full-screen invalidation.
@@ -125,7 +125,7 @@ class DevPilotHeader(Widget):
 
     def compose(self) -> ComposeResult:
         with Horizontal():
-            yield Static(" ◈ AgentVerse ", classes="header-logo", id="hdr-logo")
+            yield Static(" ◈ DevPilot ", classes="header-logo", id="hdr-logo")
             yield Static("│", classes="header-sep")
             yield Static("", classes="header-workspace", id="hdr-workspace")
             yield Static("", classes="header-git",       id="hdr-git")

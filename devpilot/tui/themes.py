@@ -1,7 +1,7 @@
 """
 tui/themes.py
 =============
-AgentVerse ships nine curated dark themes. Custom themes (AgentVerse, Midnight,
+DevPilot ships nine curated dark themes. Custom themes (DevPilot, Midnight,
 Dracula, Cyberpunk) are bespoke `textual.theme.Theme` registrations that own
 their full palette.
 
@@ -18,8 +18,8 @@ from textual.theme import Theme
 # Custom theme definitions
 # ---------------------------------------------------------------------------
 
-_AGENTVERSE = Theme(
-    name="agentverse",
+_DEVPILOT = Theme(
+    name="devpilot",
     dark=True,
     primary="#2F81F7",          # GitHub blue
     secondary="#8B5CF6",        # violet
@@ -141,7 +141,7 @@ _CYBERPUNK = Theme(
 # Display name → Textual theme id
 # Order here drives the Theme picker / command palette.
 THEMES: dict[str, str] = {
-    "AgentVerse":       "agentverse",
+    "DevPilot":       "devpilot",
     "DevPilot Dark":    "devpilot-dark",
     "Tokyo Night":       "tokyo-night",
     "Midnight":          "devpilot-midnight",
@@ -153,11 +153,11 @@ THEMES: dict[str, str] = {
     "Cyberpunk":         "devpilot-cyberpunk",
 }
 
-DEFAULT_THEME = "AgentVerse"
+DEFAULT_THEME = "DevPilot"
 
 # Accent colour shown as a swatch in the theme picker (hex, for the preview dot)
 THEME_ACCENTS: dict[str, str] = {
-    "AgentVerse":       "#2F81F7",
+    "DevPilot":       "#2F81F7",
     "DevPilot Dark":    "#3B82F6",
     "Tokyo Night":       "#7AA2F7",
     "Midnight":          "#5B8AF5",
@@ -173,7 +173,7 @@ THEME_ACCENTS: dict[str, str] = {
 def register_custom_themes(app) -> None:
     """Register bespoke themes with Textual's theme registry."""
     try:
-        app.register_theme(_AGENTVERSE)
+        app.register_theme(_DEVPILOT)
         app.register_theme(_DEVPILOT_DARK)
         app.register_theme(_MIDNIGHT)
         app.register_theme(_DRACULA)

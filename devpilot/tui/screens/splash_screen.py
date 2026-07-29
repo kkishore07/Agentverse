@@ -1,7 +1,7 @@
 """
 tui/screens/splash_screen.py
 ===========================
-Startup Splash Screen for AgentVerse — Autonomous AI Software Development Team.
+Startup Splash Screen for DevPilot — Autonomous AI Software Development Team.
 """
 
 from __future__ import annotations
@@ -13,12 +13,12 @@ from textual.screen import ModalScreen
 from textual.widgets import Static
 
 SPLASH_ASCII = """\
-    _                    _ __   __
-   / \\   __ _  ___ _ __ | |\\ \\ / /__ _ __ ___  ___
-  / _ \\ / _` |/ _ \\ '_ \\| __\\ V / _ \\ '__/ __|/ _ \\
- / ___ \\ (_| |  __/ | | | |_ | |  __/ |  \\__ \\  __/
-/_/   \\_\\__, |\\___|_| |_|\\__||_|\\___|_|  |___/\\___|
-        |___/
+██████╗ ███████╗██╗   ██╗██████╗ ██╗██╗      ██████╗ ████████╗
+██╔══██╗██╔════╝██║   ██║██╔══██╗██║██║     ██╔═══██╗╚══██╔══╝
+██║  ██║█████╗  ██║   ██║██████╔╝██║██║     ██║   ██║   ██║
+██║  ██║██╔══╝  ╚██╗ ██╔╝██╔═══╝ ██║██║     ██║   ██║   ██║
+██████╔╝███████╗ ╚████╔╝ ██║     ██║███████╗╚██████╔╝   ██║
+╚═════╝ ╚══════╝  ╚═══╝  ╚═╝     ╚═╝╚══════╝ ╚═════╝    ╚═╝
 """
 
 class SplashScreen(ModalScreen[None]):
@@ -31,7 +31,7 @@ class SplashScreen(ModalScreen[None]):
     }
 
     #splash-container {
-        width: 66;
+        width: 80;
         height: auto;
         padding: 2 3;
         border: solid #30363D;
@@ -57,6 +57,7 @@ class SplashScreen(ModalScreen[None]):
         color: #7D8590;
         text-align: center;
         margin-bottom: 2;
+        display: none;
     }
 
     .splash-status {
@@ -70,39 +71,31 @@ class SplashScreen(ModalScreen[None]):
         text-align: center;
         margin-top: 1;
         height: 1;
+        display: none;
     }
     """
 
     def compose(self) -> ComposeResult:
         with Container(id="splash-container"):
             yield Static(SPLASH_ASCII, classes="splash-logo")
-            yield Static("Autonomous AI Software Development Team", classes="splash-tagline")
-            yield Static("Planner · Architect · Coder · Tester · Reviewer · Docs · GitHub", classes="splash-subtitle")
-            yield Static("Initializing workspace...", id="splash-status", classes="splash-status")
-            yield Static("", id="splash-agents", classes="splash-agents")
+            yield Static("AI Software Engineering Workspace", classes="splash-tagline")
+            yield Static("", id="splash-status", classes="splash-status")
 
     def on_mount(self) -> None:
         self.run_worker(self._initialize())
 
     async def _initialize(self) -> None:
         status = self.query_one("#splash-status", Static)
-        agents_label = self.query_one("#splash-agents", Static)
 
         steps = [
-            ("Loading runtime...",      ""),
-            ("Connecting to LLM...",    ""),
-            ("Booting Planner...",      "🧭 Planner"),
-            ("Booting Architect...",    "🏗 Architect"),
-            ("Booting Coder...",        "💻 Coder"),
-            ("Booting Tester...",       "🧪 Tester"),
-            ("Loading workspace...",    ""),
-            ("All systems ready!",      ""),
+            "Loading Models...",
+            "Loading Agents...",
+            "Loading Skills...",
+            "Loading Workspace...",
         ]
-        for step, agent in steps:
+        for step in steps:
             status.update(f"[bold #56D364]{step}[/]")
-            if agent:
-                agents_label.update(f"[dim #7D8590]{agent} online[/]")
-            await asyncio.sleep(0.10)
+            await asyncio.sleep(0.3)
         await asyncio.sleep(0.25)
         self.dismiss()
 

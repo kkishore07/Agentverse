@@ -67,7 +67,7 @@ AGENT_ICONS = {
 }
 
 WELCOME = (
-    "## ◈ AgentVerse — Autonomous AI Software Development Team\n\n"
+    "## ◈ DevPilot — Autonomous AI Software Development Team\n\n"
     "I orchestrate a team of specialized AI agents to design, code, test, review,\n"
     "document, and commit your software projects autonomously.\n\n"
     "**Pipeline:** Planner → Architect → Coder → Validator → Tester → Reviewer → Docs → GitHub\n\n"
@@ -90,7 +90,7 @@ class ChatInput(Input):
 class DevPilotApp(App[None]):
     """Premium terminal IDE for DevPilot AI coding assistant."""
 
-    TITLE = "AgentVerse"
+    TITLE = "DevPilot"
     SUB_TITLE = "Autonomous AI Software Development Team"
     COMMANDS = App.COMMANDS | {DevPilotCommands}
 

@@ -449,7 +449,7 @@ class StreamingMessage(Vertical):
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="asst-header-row"):
-            yield Static("◈  AgentVerse", classes="msg-role-asst")
+            yield Static("◈  DevPilot", classes="msg-role-asst")
             yield Button("📋 Copy", id="btn-copy-asst", classes="asst-copy-btn")
         yield Horizontal(id="timeline-container", classes="timeline-hidden")
         yield Vertical(id="thinking-container")
@@ -573,7 +573,10 @@ class StreamingMessage(Vertical):
 
     def watch_text(self, value: str) -> None:
         try:
-            self.query_one("#stream-body", Markdown).update(value or "▍")
+            display_value = value or "▍"
+            if "{" in display_value and not display_value.strip().startswith("```"):
+                display_value = f"```json\n{display_value}\n```"
+            self.query_one("#stream-body", Markdown).update(display_value)
         except Exception:
             pass
 

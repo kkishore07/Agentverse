@@ -444,7 +444,7 @@ class WorkspacePanel(VerticalScroll):
     }
     """
 
-    project_name: reactive[str] = reactive("AgentVerse")
+    project_name: reactive[str] = reactive("DevPilot")
     language: reactive[str] = reactive("Python")
     framework: reactive[str] = reactive("Textual")
     git_branch: reactive[str] = reactive("main")
@@ -462,13 +462,13 @@ class WorkspacePanel(VerticalScroll):
     cpu_usage: reactive[str] = reactive("—")
     ram_usage: reactive[str] = reactive("—")
 
-    theme_name: reactive[str] = reactive("AgentVerse")
+    theme_name: reactive[str] = reactive("DevPilot")
     plugin_status: reactive[str] = reactive("8 Active")
     messages_count: reactive[int] = reactive(0)
 
     def compose(self) -> ComposeResult:
-        # ── AGENTVERSE BRANDING ──────────────────────────────
-        yield Static(" ◈ AGENTVERSE", classes="wp-section-header")
+        # ── DEVPILOT BRANDING ──────────────────────────────
+        yield Static(" ◈ DEVPILOT", classes="wp-section-header")
 
         with Vertical(classes="wp-section-body"):
             yield Static("[dim]Autonomous AI Software Development Team[/]", classes="wp-row")

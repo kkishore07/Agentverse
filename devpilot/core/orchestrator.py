@@ -146,6 +146,12 @@ class Orchestrator:
             # Execute the specific agent for this stage
             if stage == "planner":
                 await self._run_planner(context)
+                if getattr(context, "project_name", None):
+                    import re
+                    slug = re.sub(r'[^a-z0-9]+', '-', context.project_name.lower()).strip('-') or "app"
+                    context.workspace_dir = self._workspace_dir / slug
+                    context.workspace_dir.mkdir(parents=True, exist_ok=True)
+                    ws_mgr = WorkspaceManager(context.workspace_dir, bus=self._bus)
             elif stage == "architect":
                 await self._run_architect(context)
             elif stage == "coder":
@@ -260,7 +266,7 @@ class Orchestrator:
             self._emit(EVENT_AGENT_STARTED, agent_name="Coder")
             self._emit(EVENT_AGENT_STEP, agent_name="Coder", step=f"Generating {spec['path']}")
 
-            target_path = (self._workspace_dir / spec['path']).resolve()
+            target_path = (context.workspace_dir / spec['path']).resolve()
             existing_content = None
             if target_path.exists():
                 self._emit(EVENT_FILE_READING, path=spec['path'])
@@ -310,7 +316,7 @@ class Orchestrator:
         self._emit(EVENT_AGENT_STARTED, agent_name="Validator")
         self._emit(EVENT_AGENT_STEP, agent_name="Validator", step="Validating files & syntax")
 
-        val_result = await agent.run(ValidatorInput(workspace_dir=self._workspace_dir, written_files=context.written_files))
+        val_result = await agent.run(ValidatorInput(workspace_dir=context.workspace_dir, written_files=context.written_files))
         context.validation_passed = val_result.passed
 
         if not val_result.passed:
@@ -331,7 +337,7 @@ class Orchestrator:
         self._emit(EVENT_AGENT_STARTED, agent_name="Tester")
         self._emit(EVENT_AGENT_STEP, agent_name="Tester", step="Running automated tests")
 
-        test_result = await agent.run(TesterInput(workspace_dir=self._workspace_dir))
+        test_result = await agent.run(TesterInput(workspace_dir=context.workspace_dir))
         
         if test_result.ran_tests:
             context.tests_passed = test_result.passed
@@ -366,7 +372,7 @@ class Orchestrator:
             files_to_fix.add(context.written_files[0]) # fallback
 
         for file_path in files_to_fix:
-            target_path = (self._workspace_dir / file_path).resolve()
+            target_path = (context.workspace_dir / file_path).resolve()
             if target_path.exists():
                 self._emit(EVENT_AGENT_STARTED, agent_name="Fixer")
                 self._emit(EVENT_AGENT_STEP, agent_name="Fixer", step=f"Fixing {file_path}")
@@ -402,7 +408,7 @@ class Orchestrator:
         
         files_to_review = []
         for path in context.written_files:
-            target_path = (self._workspace_dir / path).resolve()
+            target_path = (context.workspace_dir / path).resolve()
             if target_path.exists():
                 content = target_path.read_text(encoding="utf-8", errors="replace")
                 files_to_review.append({"path": path, "content": content})

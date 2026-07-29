@@ -1,7 +1,7 @@
 """
 server.py
 =========
-AgentVerse Web IDE Server — FastAPI bridge between the existing Python
+DevPilot Web IDE Server — FastAPI bridge between the existing Python
 backend and the browser-based IDE frontend.
 
 Launch:  python server.py
@@ -91,7 +91,7 @@ async def lifespan(app: FastAPI):
     print(f"  [+] Backend ready  --  model: {_backend.settings.model_name}")
     yield
 
-app = FastAPI(title="AgentVerse Web IDE", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="DevPilot Web IDE", version="1.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -314,7 +314,7 @@ def _detect_language(path: str) -> str:
 # ── entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print()
-    print("  [*] AgentVerse Web IDE")
+    print("  [*] DevPilot Web IDE")
     print("  -----------------------------------------")
     print("  -> http://localhost:8000")
     print("  Press Ctrl+C to stop")
