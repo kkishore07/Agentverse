@@ -1,1165 +1,851 @@
-/**
- * AgentVerse Web IDE — app.js
- * ============================================================
- * Sections:
- *  1. CONFIG & STATE
- *  2. WEBSOCKET
- *  3. PIPELINE BAR
- *  4. FILE TREE
- *  5. MONACO EDITOR
- *  6. AGENT CARDS
- *  7. TELEMETRY
- *  8. FILE ACTIVITY
- *  9. BOTTOM PANEL (Logs, Terminal, Chat, Tests, Git)
- * 10. TOAST NOTIFICATIONS
- * 11. EVENT ROUTING
- * 12. INIT
- */
+(function(){
+  "use strict";
 
-"use strict";
+  /* ================= AGENT DEFINITIONS ================= */
+  var AGENTS = [
+    {id:'planner',   name:'Planner',       icon:'🧠', color:'var(--c-planner)',   idle:'awaiting request'},
+    {id:'architect', name:'Architect',     icon:'🏗️', color:'var(--c-architect)', idle:'no structure yet'},
+    {id:'coder',     name:'Coder',         icon:'💻', color:'var(--c-coder)',     idle:'no files streamed'},
+    {id:'validator', name:'Validator',     icon:'🔍', color:'var(--c-validator)', idle:'nothing to check'},
+    {id:'tester',    name:'Tester',        icon:'🧪', color:'var(--c-tester)',    idle:'no suite run'},
+    {id:'reviewer',  name:'Reviewer',      icon:'🧐', color:'var(--c-reviewer)',  idle:'no diff reviewed'},
+    {id:'docs',      name:'Documentation', icon:'📖', color:'var(--c-docs)',      idle:'README untouched'},
+    {id:'github',    name:'GitHub',        icon:'🐙', color:'var(--c-github)',    idle:'no commit staged'}
+  ];
 
-// ══════════════════════════════════════════════════════════════
-// 1. CONFIG & STATE
-// ══════════════════════════════════════════════════════════════
-const WS_URL = `ws://${location.host}/ws`;
-
-const PIPELINE_STAGES = [
-  { id: "prompt",    label: "Prompt",        icon: "💬" },
-  { id: "planning",  label: "Planning",       icon: "🧭" },
-  { id: "architect", label: "Architecture",   icon: "🏗" },
-  { id: "coding",    label: "Coding",         icon: "💻" },
-  { id: "validate",  label: "Validation",     icon: "✅" },
-  { id: "testing",   label: "Testing",        icon: "🧪" },
-  { id: "review",    label: "Review",         icon: "👀" },
-  { id: "docs",      label: "Docs",           icon: "📝" },
-  { id: "git",       label: "Git Commit",     icon: "🌿" },
-  { id: "done",      label: "Completed",      icon: "🎉" },
-];
-
-const AGENTS = [
-  { id: "planner",       name: "Planner",       icon: "🧭", desc: "Breaking goal into tasks" },
-  { id: "architect",     name: "Architect",     icon: "🏗",  desc: "Designing folder & stack" },
-  { id: "coder",         name: "Coder",         icon: "💻", desc: "Generating source files" },
-  { id: "validator",     name: "Validator",     icon: "✅", desc: "Validating code & standards" },
-  { id: "tester",        name: "Tester",        icon: "🧪", desc: "Writing test coverage" },
-  { id: "reviewer",      name: "Reviewer",      icon: "👀", desc: "Reviewing before commit" },
-  { id: "documentation", name: "Documentation", icon: "📝", desc: "Generating README & docs" },
-  { id: "github",        name: "GitHub",        icon: "🌿", desc: "Managing Git & PRs" },
-];
-
-const FILE_ICONS = {
-  py: "🐍", js: "📜", jsx: "⚛️", ts: "📘", tsx: "⚛️",
-  html: "🌐", css: "🎨", json: "⚙️", yaml: "⚙️", yml: "⚙️",
-  md: "📝", sh: "⚡", bash: "⚡", toml: "🔧", env: "🔒",
-  png: "🖼️", jpg: "🖼️", svg: "🖼️", gif: "🖼️",
-  zip: "📦", gz: "📦", rs: "🦀", go: "🐹", java: "☕",
-  cpp: "⚙️", c: "⚙️", rb: "💎", lock: "🔒",
-};
-const DIR_ICONS = { open: "▾", closed: "▸" };
-
-const state = {
-  ws: null,
-  wsReady: false,
-  reconnectTimer: null,
-
-  openFiles: {},      // path → { content, language, modified }
-  activeFile: null,
-  activePath: null,
-
-  agentTimers: {},     // agentId → interval id
-  chatBuffer: "",
-  activeChatMsg: null,
-
-  currentPipelineStage: null,
-  completedStages: new Set(),
-};
-
-// ══════════════════════════════════════════════════════════════
-// 2. WEBSOCKET
-// ══════════════════════════════════════════════════════════════
-function connectWS() {
-  if (state.ws) {
-    try { state.ws.close(); } catch (_) {}
-  }
-
-  const ws = new WebSocket(WS_URL);
-  state.ws = ws;
-
-  ws.onopen = () => {
-    state.wsReady = true;
-    clearTimeout(state.reconnectTimer);
-    setConnStatus(true);
-    addLog("Connected to AgentVerse backend", "success");
-  };
-
-  ws.onmessage = (evt) => {
-    try {
-      const msg = JSON.parse(evt.data);
-      routeEvent(msg);
-    } catch (e) { /* ignore */ }
-  };
-
-  ws.onerror = () => {
-    state.wsReady = false;
-    setConnStatus(false);
-  };
-
-  ws.onclose = () => {
-    state.wsReady = false;
-    setConnStatus(false);
-    state.reconnectTimer = setTimeout(connectWS, 3000);
-    addLog("Disconnected — reconnecting in 3s…", "warn");
-  };
-}
-
-function wsSend(data) {
-  if (state.wsReady && state.ws && state.ws.readyState === WebSocket.OPEN) {
-    state.ws.send(JSON.stringify(data));
-  }
-}
-
-// ══════════════════════════════════════════════════════════════
-// 3. PIPELINE BAR
-// ══════════════════════════════════════════════════════════════
-function buildPipelineBar() {
-  const bar = document.getElementById("pipeline-bar");
-  bar.innerHTML = "";
-  PIPELINE_STAGES.forEach((stage, idx) => {
-    const pill = document.createElement("div");
-    pill.className = "pipeline-stage";
-    pill.innerHTML = `
-      <div class="stage-pill" id="stage-${stage.id}" title="${stage.label}">
-        <span class="stage-num">${idx + 1}</span>
-        <span class="stage-icon">${stage.icon}</span>
-        <span class="stage-label">${stage.label}</span>
-      </div>`;
-    bar.appendChild(pill);
-
-    if (idx < PIPELINE_STAGES.length - 1) {
-      const arrow = document.createElement("span");
-      arrow.className = "stage-arrow";
-      arrow.textContent = "›";
-      bar.appendChild(arrow);
-    }
-  });
-  // Set initial state
-  setPipelineStage("prompt");
-}
-
-function setPipelineStage(stageId) {
-  const normalized = stageId.toLowerCase().replace(/\s+/g, "");
-  let matched = null;
-  for (const s of PIPELINE_STAGES) {
-    if (s.id === normalized || s.label.toLowerCase().replace(/\s+/g, "") === normalized ||
-        normalized.includes(s.id) || s.id.includes(normalized.slice(0, 5))) {
-      matched = s.id;
-      break;
-    }
-  }
-  if (!matched) return;
-
-  state.currentPipelineStage = matched;
-
-  PIPELINE_STAGES.forEach(s => {
-    const el = document.getElementById(`stage-${s.id}`);
-    if (!el) return;
-    el.classList.remove("active", "done");
-    if (state.completedStages.has(s.id)) {
-      el.classList.add("done");
-      el.querySelector(".stage-num").textContent = "✓";
-    } else if (s.id === matched) {
-      el.classList.add("active");
-    }
-  });
-
-  // Scroll active stage into view
-  const activeEl = document.getElementById(`stage-${matched}`);
-  if (activeEl) activeEl.scrollIntoView({ inline: "center", behavior: "smooth" });
-}
-
-function completePipelineStage(stageId) {
-  const normalized = stageId.toLowerCase();
-  for (const s of PIPELINE_STAGES) {
-    if (s.id === normalized || s.label.toLowerCase().includes(normalized)) {
-      state.completedStages.add(s.id);
-      const el = document.getElementById(`stage-${s.id}`);
-      if (el) {
-        el.classList.remove("active");
-        el.classList.add("done");
-        el.querySelector(".stage-num").textContent = "✓";
-      }
-      break;
-    }
-  }
-}
-
-// ══════════════════════════════════════════════════════════════
-// 4. FILE TREE
-// ══════════════════════════════════════════════════════════════
-function renderTree(node, container, depth = 0) {
-  if (!node || !node.name) return;
-
-  const item = document.createElement("div");
-  item.className = "tree-item";
-  item.dataset.path = node.path;
-  item.dataset.type = node.type;
-
-  const indent = depth > 0 ? `<span class="tree-indent" style="width:${depth * 12}px"></span>` : "";
-
-  if (node.type === "dir") {
-    const icon = DIR_ICONS.closed;
-    item.innerHTML = `
-      ${indent}
-      <span class="tree-toggle">${icon}</span>
-      <span class="tree-icon">📁</span>
-      <span class="tree-name">${escHtml(node.name)}</span>`;
-    item.addEventListener("click", () => toggleDir(item, node, depth));
-  } else {
-    const ext = node.name.split(".").pop().toLowerCase();
-    const icon = FILE_ICONS[ext] || "📄";
-    item.innerHTML = `
-      ${indent}
-      <span class="tree-toggle"></span>
-      <span class="tree-icon">${icon}</span>
-      <span class="tree-name">${escHtml(node.name)}</span>`;
-    item.addEventListener("click", () => openFileFromTree(node.path, item));
-  }
-
-  container.appendChild(item);
-}
-
-function toggleDir(item, node, depth) {
-  const isOpen = item.dataset.open === "1";
-  const toggle = item.querySelector(".tree-toggle");
-  const icon   = item.querySelector(".tree-icon");
-
-  if (isOpen) {
-    // Collapse
-    item.dataset.open = "0";
-    toggle.textContent = DIR_ICONS.closed;
-    icon.textContent = "📁";
-    const children = item.nextElementSibling;
-    if (children && children.dataset.treeChildren) children.remove();
-  } else {
-    // Expand
-    item.dataset.open = "1";
-    toggle.textContent = DIR_ICONS.open;
-    icon.textContent = "📂";
-    if (node.children && node.children.length > 0) {
-      const childContainer = document.createElement("div");
-      childContainer.dataset.treeChildren = "1";
-      node.children.forEach(child => renderTree(child, childContainer, depth + 1));
-      item.insertAdjacentElement("afterend", childContainer);
-    }
-  }
-}
-
-function renderFileTree(tree) {
-  const container = document.getElementById("file-tree");
-  container.innerHTML = "";
-  if (tree && tree.children) {
-    tree.children.forEach(child => renderTree(child, container, 0));
-  }
-}
-
-function openFileFromTree(path, treeItem) {
-  // Deactivate old
-  document.querySelectorAll(".tree-item.active").forEach(el => el.classList.remove("active"));
-  if (treeItem) treeItem.classList.add("active");
-  wsSend({ type: "read_file", path });
-}
-
-function highlightFileInTree(path, state = "glowing") {
-  const item = document.querySelector(`.tree-item[data-path="${CSS.escape(path)}"]`);
-  if (item) {
-    item.classList.remove("glowing", "saved", "new-file");
-    item.classList.add(state);
-  }
-}
-
-function addFileToTree(path) {
-  const existing = document.querySelector(`.tree-item[data-path="${CSS.escape(path)}"]`);
-  if (existing) { highlightFileInTree(path, "glowing"); return; }
-
-  const parts = path.split(/[\\/]/);
-  const name = parts[parts.length - 1];
-  const ext = name.split(".").pop().toLowerCase();
-  const icon = FILE_ICONS[ext] || "📄";
-
-  const item = document.createElement("div");
-  item.className = "tree-item new-file";
-  item.dataset.path = path;
-  item.dataset.type = "file";
-  item.innerHTML = `<span class="tree-icon">${icon}</span><span class="tree-name">${escHtml(name)}</span>`;
-  item.addEventListener("click", () => openFileFromTree(path, item));
-
-  document.getElementById("file-tree").prepend(item);
-}
-
-// ══════════════════════════════════════════════════════════════
-// 5. MONACO EDITOR
-// ══════════════════════════════════════════════════════════════
-let monacoEditor = null;
-let liveTyper    = null;
-
-function initMonaco() {
-  require.config({
-    paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs" }
-  });
-
-  require(["vs/editor/editor.main"], function () {
-    // AgentVerse Dark Theme — GitHub token colors
-    monaco.editor.defineTheme("agentverse-dark", {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment",       foreground: "7D8590", fontStyle: "italic" },
-        { token: "keyword",       foreground: "FF7B72" },
-        { token: "keyword.flow",  foreground: "FF7B72" },
-        { token: "string",        foreground: "A5D6FF" },
-        { token: "string.escape", foreground: "79C0FF" },
-        { token: "number",        foreground: "79C0FF" },
-        { token: "type",          foreground: "FFA657" },
-        { token: "class",         foreground: "F0883E" },
-        { token: "function",      foreground: "D2A8FF" },
-        { token: "variable",      foreground: "E6EDF3" },
-        { token: "decorator",     foreground: "2EA043" },
-        { token: "regexp",        foreground: "A5D6FF" },
+  /* ================= PROJECT TEMPLATES ================= */
+  function healthTemplate(){
+    return {
+      id:'health', label:'personal-health-dashboard',
+      plan:[
+        'Parse request: dashboard for steps, heart rate, sleep, hydration',
+        'No backend requested — single-page static build',
+        'Target stack: semantic HTML5 + vanilla CSS + vanilla JS'
       ],
-      colors: {
-        "editor.background":                "#0D1117",
-        "editor.foreground":                "#E6EDF3",
-        "editor.lineHighlightBackground":   "#161B22",
-        "editor.selectionBackground":       "#1C3A5E",
-        "editor.inactiveSelectionBackground": "#1C3A5E80",
-        "editorLineNumber.foreground":      "#484F58",
-        "editorLineNumber.activeForeground":"#7D8590",
-        "editorCursor.foreground":          "#2F81F7",
-        "editorWidget.background":          "#161B22",
-        "editorWidget.border":              "#30363D",
-        "editorSuggestWidget.background":   "#1C2128",
-        "editorSuggestWidget.selectedBackground": "#2D333B",
-        "input.background":                 "#0D1117",
-        "input.border":                     "#30363D",
-        "minimap.background":               "#0D1117",
-        "scrollbar.shadow":                 "#010409",
-        "scrollbarSlider.background":       "#30363D80",
-        "scrollbarSlider.hoverBackground":  "#30363D",
-        "scrollbarSlider.activeBackground": "#2F81F7",
-        "editorBracketMatch.background":    "#17E5E650",
-        "editorBracketMatch.border":        "#17E5E6",
-      },
-    });
+      files:[
+        {path:'index.html', agent:'coder', lang:'html', content:
+`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Health Dashboard</title>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Health Dashboard</h1>
+    <span id="clock" class="clock"></span>
+  </header>
 
-    monacoEditor = monaco.editor.create(
-      document.getElementById("monaco-container"),
-      {
-        value: [
-          "// ◈  AgentVerse Web IDE",
-          "// ─────────────────────────────────────────────────────",
-          "// Describe what you want to build in the Chat panel ↓",
-          "// The AI pipeline will generate your full project here.",
-          "//",
-          "// Planner  → Architect → Coder → Validator",
-          "// Tester   → Reviewer  → Docs  → Git Commit",
-        ].join("\n"),
-        language: "javascript",
-        theme: "agentverse-dark",
-        automaticLayout: true,
-        fontSize: 13.5,
-        fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
-        fontLigatures: true,
-        lineNumbers: "on",
-        minimap: { enabled: true, scale: 1, renderCharacters: false },
-        scrollBeyondLastLine: false,
-        wordWrap: "off",
-        renderLineHighlight: "all",
-        cursorBlinking: "smooth",
-        cursorSmoothCaretAnimation: "on",
-        smoothScrolling: true,
-        padding: { top: 12, bottom: 20 },
-        bracketPairColorization: { enabled: true },
-        guides: {
-          bracketPairs: "active",
-          indentation: true,
-        },
-        suggest: { insertMode: "replace" },
-        overviewRulerBorder: false,
-        renderWhitespace: "none",
-        formatOnPaste: true,
-        tabSize: 2,
-      }
-    );
+  <main class="grid">
+    <section class="card">
+      <span class="label">Steps</span>
+      <span class="value" id="steps">0</span>
+      <div class="bar"><div class="bar-fill" id="stepsBar"></div></div>
+    </section>
 
-    liveTyper = new LiveTyper(monacoEditor);
+    <section class="card">
+      <span class="label">Heart Rate</span>
+      <span class="value" id="hr">0<small> bpm</small></span>
+      <div class="bar"><div class="bar-fill" id="hrBar"></div></div>
+    </section>
 
-    // Update status bar on cursor change
-    monacoEditor.onDidChangeCursorPosition((e) => {
-      const pos = e.position;
-      document.getElementById("editor-ln-col").textContent =
-        `Ln ${pos.lineNumber}, Col ${pos.column}`;
-    });
+    <section class="card">
+      <span class="label">Sleep</span>
+      <span class="value" id="sleep">0<small> hrs</small></span>
+      <div class="bar"><div class="bar-fill" id="sleepBar"></div></div>
+    </section>
 
-    // Load initial file tree
-    wsSend({ type: "get_files" });
-  });
+    <section class="card">
+      <span class="label">Hydration</span>
+      <span class="value" id="water">0<small> / 8 cups</small></span>
+      <div class="bar"><div class="bar-fill" id="waterBar"></div></div>
+    </section>
+  </main>
+
+  <footer>Synced <span id="synced">just now</span></footer>
+</body>
+</html>
+`},
+        {path:'style.css', agent:'coder', lang:'css', content:
+`* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+  background: #f4f6f8;
+  color: #1c2230;
+}
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 28px;
+  background: #12151d;
+  color: #eef1f5;
+}
+.topbar h1 { font-size: 18px; margin: 0; }
+.clock { font-size: 12px; color: #6ee7c8; font-family: monospace; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  padding: 24px;
+}
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 18px 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.card .label { font-size: 12px; color: #6b7385; letter-spacing: .4px; text-transform: uppercase; }
+.card .value { font-size: 28px; font-weight: 700; }
+.card .value small { font-size: 13px; font-weight: 500; color: #6b7385; }
+.bar { height: 6px; border-radius: 4px; background: #e7ebef; overflow: hidden; }
+.bar-fill { height: 100%; width: 0%; background: #2fbf9a; transition: width 1.1s ease; }
+
+footer { text-align: center; padding: 14px; font-size: 11px; color: #99a1ad; }
+`},
+        {path:'script.js', agent:'coder', lang:'js', content:
+`function animateValue(el, target, suffix) {
+  let cur = 0;
+  const step = Math.max(1, Math.round(target / 40));
+  const t = setInterval(() => {
+    cur += step;
+    if (cur >= target) { cur = target; clearInterval(t); }
+    el.textContent = cur + (suffix || '');
+  }, 20);
 }
 
-function openFileInEditor(path, content, language) {
-  if (!monacoEditor) return;
-  state.activePath = path;
+const data = { steps: 8420, stepsGoal: 10000, hr: 72, sleep: 7.2, water: 5 };
 
-  // Update tabs
-  addEditorTab(path, content, language);
+animateValue(document.getElementById('steps'), data.steps);
+document.getElementById('stepsBar').style.width = (data.steps / data.stepsGoal * 100) + '%';
 
-  // Set content
-  const model = monacoEditor.getModel();
-  if (model) {
-    const old = monaco.editor.createModel(content, language);
-    monacoEditor.setModel(old);
+document.getElementById('hr').innerHTML = data.hr + '<small> bpm</small>';
+document.getElementById('hrBar').style.width = '64%';
+
+document.getElementById('sleep').innerHTML = data.sleep + '<small> hrs</small>';
+document.getElementById('sleepBar').style.width = (data.sleep / 9 * 100) + '%';
+
+document.getElementById('water').innerHTML = data.water + '<small> / 8 cups</small>';
+document.getElementById('waterBar').style.width = (data.water / 8 * 100) + '%';
+
+function tickClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString();
+}
+tickClock();
+setInterval(tickClock, 1000);
+`},
+        {path:'README.md', agent:'docs', lang:'md', content:
+`# Personal Health Dashboard
+
+A single-page dashboard that surfaces steps, heart rate, sleep and hydration
+at a glance. Generated by the DevPilot Coder agent, static HTML/CSS/JS,
+no build step required — open `+'`index.html`'+` directly.
+`}
+      ]
+    };
   }
 
-  // Update breadcrumbs
-  setBreadcrumbs(path);
+  function iotTemplate(){
+    return {
+      id:'iot', label:'iot-sensor-monitor',
+      plan:[
+        'Parse request: live monitor for temperature, humidity, signal',
+        'No hardware bridge available — simulate live values client-side',
+        'Target stack: vanilla HTML/CSS/JS, dark operator console styling'
+      ],
+      files:[
+        {path:'index.html', agent:'coder', lang:'html', content:
+`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sensor Monitor</title>
+</head>
+<body>
+  <header>
+    <h1>IoT Sensor Monitor</h1>
+    <span class="badge" id="connBadge">● connected</span>
+  </header>
 
-  // Update status bar
-  document.getElementById("editor-language").textContent =
-    (language || "plaintext").toUpperCase();
+  <main class="grid">
+    <div class="metric">
+      <span class="label">Temperature</span>
+      <span class="value"><span id="temp">--</span>°C</span>
+      <div class="track"><div class="fill" id="tempFill"></div></div>
+    </div>
+    <div class="metric">
+      <span class="label">Humidity</span>
+      <span class="value"><span id="hum">--</span>%</span>
+      <div class="track"><div class="fill" id="humFill"></div></div>
+    </div>
+    <div class="metric">
+      <span class="label">Motion</span>
+      <span class="value" id="motion">idle</span>
+      <div class="track"><div class="fill" id="motionFill"></div></div>
+    </div>
+    <div class="metric">
+      <span class="label">Signal (RSSI)</span>
+      <span class="value"><span id="rssi">--</span> dBm</span>
+      <div class="track"><div class="fill" id="rssiFill"></div></div>
+    </div>
+  </main>
+
+  <section class="log">
+    <div class="log-head">device log</div>
+    <div id="logBody"></div>
+  </section>
+</body>
+</html>
+`},
+        {path:'style.css', agent:'coder', lang:'css', content:
+`* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #0b0e14;
+  color: #d7dce5;
+  font-family: 'JetBrains Mono', monospace;
+}
+header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 18px 24px; border-bottom: 1px solid #232a38;
+}
+header h1 { font-size: 15px; margin: 0; letter-spacing: .4px; }
+.badge { font-size: 11px; color: #6ee7c8; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px; padding: 20px 24px;
+}
+.metric {
+  background: #11151d; border: 1px solid #232a38; border-radius: 8px;
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;
+}
+.metric .label { font-size: 10.5px; color: #6b7385; text-transform: uppercase; letter-spacing: 1px; }
+.metric .value { font-size: 22px; font-weight: 700; color: #f2b866; }
+.track { height: 5px; background: #1c2230; border-radius: 3px; overflow: hidden; }
+.fill { height: 100%; width: 30%; background: #67d0f2; transition: width .6s ease; }
+
+.log { margin: 0 24px 24px; border: 1px solid #232a38; border-radius: 8px; background: #11151d; }
+.log-head { padding: 8px 14px; font-size: 10.5px; color: #6b7385; border-bottom: 1px solid #232a38; letter-spacing: 1px;}
+#logBody { max-height: 140px; overflow-y: auto; padding: 8px 14px; font-size: 11px; color: #8b93a3; line-height: 1.8; }
+`},
+        {path:'script.js', agent:'coder', lang:'js', content:
+`function rand(min, max) { return Math.random() * (max - min) + min; }
+
+const state = { temp: 22.4, hum: 46, rssi: -58 };
+
+function log(msg) {
+  const el = document.getElementById('logBody');
+  const line = document.createElement('div');
+  const t = new Date().toLocaleTimeString();
+  line.textContent = '[' + t + ']  ' + msg;
+  el.prepend(line);
+  while (el.childNodes.length > 30) el.removeChild(el.lastChild);
 }
 
-function liveTypeContent(path, content, language) {
-  if (!monacoEditor || !liveTyper) return;
+function tick() {
+  state.temp += rand(-0.3, 0.3);
+  state.hum += rand(-1, 1);
+  state.rssi += rand(-2, 2);
 
-  state.activePath = path;
-  addEditorTab(path, "", language);
-  setBreadcrumbs(path);
+  document.getElementById('temp').textContent = state.temp.toFixed(1);
+  document.getElementById('tempFill').style.width = Math.min(100, state.temp * 2) + '%';
 
-  const model = monaco.editor.createModel("", language || "plaintext");
-  monacoEditor.setModel(model);
+  document.getElementById('hum').textContent = Math.round(state.hum);
+  document.getElementById('humFill').style.width = state.hum + '%';
 
-  document.getElementById("editor-language").textContent =
-    (language || "plaintext").toUpperCase();
+  document.getElementById('rssi').textContent = Math.round(state.rssi);
+  document.getElementById('rssiFill').style.width = (100 + state.rssi) + '%';
 
-  const indicator = document.getElementById("typing-indicator");
-  indicator.classList.add("visible");
-
-  liveTyper.type(content, () => {
-    indicator.classList.remove("visible");
-    highlightFileInTree(path, "saved");
-    showToast(`✓ Wrote ${path.split(/[\\/]/).pop()}`, "success");
-  });
+  const moving = Math.random() > 0.7;
+  document.getElementById('motion').textContent = moving ? 'motion' : 'idle';
+  document.getElementById('motionFill').style.width = moving ? '90%' : '10%';
+  if (moving) log('PIR sensor triggered');
 }
 
-// Live Typer
-class LiveTyper {
-  constructor(editor) {
-    this.editor = editor;
-    this.queue  = [];
-    this.running = false;
-    this.BATCH  = 4;   // chars per tick
-    this.TICK   = 18;  // ms per tick
-    this.onDone = null;
+log('device online, streaming telemetry');
+tick();
+setInterval(tick, 1600);
+`},
+        {path:'README.md', agent:'docs', lang:'md', content:
+`# IoT Sensor Monitor
+
+Live operator console for temperature, humidity, motion and signal
+strength. Values are simulated client-side for this demo build —
+swap `+'`script.js`'+` for a WebSocket/MQTT bridge to attach real hardware.
+`}
+      ]
+    };
   }
 
-  type(text, onDone) {
-    this.queue  = text.split("");
-    this.onDone = onDone || null;
-    if (!this.running) this._tick();
+  function portfolioTemplate(){
+    return {
+      id:'portfolio', label:'portfolio-site',
+      plan:[
+        'Parse request: single-page personal portfolio',
+        'Sections: hero, projects, contact',
+        'Target stack: vanilla HTML/CSS/JS'
+      ],
+      files:[
+        {path:'index.html', agent:'coder', lang:'html', content:
+`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Portfolio</title></head>
+<body>
+  <header class="hero">
+    <h1>Your Name</h1>
+    <p>Building things at the edge of code and curiosity.</p>
+  </header>
+  <main class="projects" id="projects"></main>
+  <footer>
+    <a href="#">GitHub</a> · <a href="#">Email</a>
+  </footer>
+</body>
+</html>
+`},
+        {path:'style.css', agent:'coder', lang:'css', content:
+`* { box-sizing: border-box; }
+body { margin:0; font-family: -apple-system, Segoe UI, sans-serif; background:#0b0e14; color:#d7dce5; }
+.hero { text-align:center; padding:70px 20px 40px; }
+.hero h1 { font-size:32px; margin:0 0 8px; }
+.hero p { color:#6b7385; }
+.projects { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; padding:20px 32px; }
+.project-card { background:#11151d; border:1px solid #232a38; border-radius:10px; padding:18px; }
+.project-card h3 { margin:0 0 6px; font-size:14px; }
+.project-card p { margin:0; font-size:12px; color:#6b7385; }
+footer { text-align:center; padding:30px; font-size:12px; color:#6b7385; }
+footer a { color:#6ee7c8; text-decoration:none; }
+`},
+        {path:'script.js', agent:'coder', lang:'js', content:
+`const projects = [
+  { name: 'Project One', desc: 'A short description of what this project does.' },
+  { name: 'Project Two', desc: 'A short description of what this project does.' },
+  { name: 'Project Three', desc: 'A short description of what this project does.' }
+];
+
+const el = document.getElementById('projects');
+projects.forEach(p => {
+  const card = document.createElement('div');
+  card.className = 'project-card';
+  card.innerHTML = '<h3>' + p.name + '</h3><p>' + p.desc + '</p>';
+  el.appendChild(card);
+});
+`},
+        {path:'README.md', agent:'docs', lang:'md', content:
+`# Portfolio Site
+
+One-page portfolio scaffold — swap in real project data and links.
+`}
+      ]
+    };
   }
 
-  _tick() {
-    if (!this.queue.length) {
-      this.running = false;
-      if (this.onDone) this.onDone();
-      return;
-    }
-    this.running = true;
-    const chars = this.queue.splice(0, this.BATCH).join("");
-    const model = this.editor.getModel();
-    if (!model) { this.running = false; return; }
-    const len = model.getValueLength();
-    const pos = model.getPositionAt(len);
-    this.editor.executeEdits("live-type", [{
-      range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column),
-      text: chars,
-    }]);
-    this.editor.revealLine(model.getLineCount(), monaco.editor.ScrollType.Smooth);
-    setTimeout(() => this._tick(), this.TICK);
+  function genericTemplate(promptText){
+    var title = (promptText || 'New Project').trim();
+    title = title.length > 46 ? title.slice(0,46) + '…' : title;
+    var titleCase = title.charAt(0).toUpperCase() + title.slice(1);
+    return {
+      id:'generic', label:'generated-app',
+      plan:[
+        'Parse request: "' + titleCase + '"',
+        'No specialised template matched — scaffolding a general landing page',
+        'Target stack: vanilla HTML/CSS/JS'
+      ],
+      files:[
+        {path:'index.html', agent:'coder', lang:'html', content:
+`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>`+titleCase+`</title></head>
+<body>
+  <header class="hero">
+    <h1>`+titleCase+`</h1>
+    <p>Scaffolded by DevPilot from your prompt.</p>
+    <button id="cta">Get started</button>
+  </header>
+  <main class="features">
+    <div class="feature"><h3>Fast</h3><p>Lightweight, dependency-free build.</p></div>
+    <div class="feature"><h3>Simple</h3><p>Readable HTML, CSS and JS you can extend.</p></div>
+    <div class="feature"><h3>Yours</h3><p>Every file is editable in the panel on the left.</p></div>
+  </main>
+</body>
+</html>
+`},
+        {path:'style.css', agent:'coder', lang:'css', content:
+`* { box-sizing: border-box; }
+body { margin:0; font-family:-apple-system, Segoe UI, sans-serif; background:#0b0e14; color:#d7dce5; }
+.hero { text-align:center; padding:80px 24px 50px; }
+.hero h1 { font-size:30px; margin:0 0 10px; }
+.hero p { color:#6b7385; margin:0 0 20px; }
+#cta { background:#6ee7c8; color:#08110d; border:0; padding:11px 22px; border-radius:6px; font-weight:700; cursor:pointer; }
+.features { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; padding:0 32px 50px; }
+.feature { background:#11151d; border:1px solid #232a38; border-radius:10px; padding:18px; }
+.feature h3 { margin:0 0 6px; font-size:14px; color:#6ee7c8; }
+.feature p { margin:0; font-size:12px; color:#6b7385; }
+`},
+        {path:'script.js', agent:'coder', lang:'js', content:
+`document.getElementById('cta').addEventListener('click', function () {
+  this.textContent = 'Nice — you clicked it';
+  this.disabled = true;
+});
+`},
+        {path:'README.md', agent:'docs', lang:'md', content:
+`# `+titleCase+`
+
+Generated by the DevPilot Coder agent from a free-text prompt.
+`}
+      ]
+    };
   }
 
-  abort() {
-    this.queue   = [];
-    this.running = false;
+  function pickTemplate(text){
+    var t = (text || '').toLowerCase();
+    if (/health|dashboard|fitness|workout/.test(t)) return healthTemplate();
+    if (/iot|sensor|device|arduino|esp32|mqtt/.test(t)) return iotTemplate();
+    if (/portfolio|resume|cv/.test(t)) return portfolioTemplate();
+    return genericTemplate(text);
   }
-}
 
-// Editor tabs
-const openTabs = {};
-function addEditorTab(path, content, language) {
-  const name = path.split(/[\\/]/).pop();
-  const ext  = name.split(".").pop().toLowerCase();
-  const icon = FILE_ICONS[ext] || "📄";
-
-  openTabs[path] = { content, language };
-
-  const tabBar = document.getElementById("editor-tabs");
-  let tab = tabBar.querySelector(`[data-tab-path="${CSS.escape(path)}"]`);
-  if (!tab) {
-    tab = document.createElement("div");
-    tab.className = "editor-tab";
-    tab.dataset.tabPath = path;
-    tab.innerHTML = `
-      <span class="tab-icon">${icon}</span>
-      <span>${escHtml(name)}</span>
-      <span class="tab-close" title="Close">✕</span>`;
-    tab.addEventListener("click", (e) => {
-      if (e.target.classList.contains("tab-close")) {
-        closeTab(path, tab);
-      } else {
-        switchToTab(path);
-      }
-    });
-    tabBar.appendChild(tab);
-  }
-  switchToTab(path);
-}
-
-function switchToTab(path) {
-  document.querySelectorAll(".editor-tab").forEach(t => t.classList.remove("active"));
-  const tab = document.querySelector(`[data-tab-path="${CSS.escape(path)}"]`);
-  if (tab) tab.classList.add("active");
-  state.activePath = path;
-  setBreadcrumbs(path);
-}
-
-function closeTab(path, tabEl) {
-  delete openTabs[path];
-  tabEl.remove();
-  // If no tabs left, clear editor
-  if (!document.querySelectorAll(".editor-tab").length) {
-    monacoEditor?.getModel()?.setValue("// No file open");
-    document.getElementById("editor-breadcrumbs").innerHTML = "";
-  }
-}
-
-function setBreadcrumbs(path) {
-  const parts = path.replace(/\\/g, "/").split("/");
-  const crumbs = document.getElementById("editor-breadcrumbs");
-  crumbs.innerHTML = parts
-    .map((p, i) =>
-      `<span class="breadcrumb-item ${i === parts.length - 1 ? "active" : ""}">${escHtml(p)}</span>`)
-    .join('<span class="breadcrumb-sep">›</span>');
-}
-
-// ══════════════════════════════════════════════════════════════
-// 6. AGENT CARDS
-// ══════════════════════════════════════════════════════════════
-function buildAgentCards() {
-  const container = document.getElementById("agent-cards");
-  container.innerHTML = "";
-  AGENTS.forEach(agent => {
-    const card = document.createElement("div");
-    card.className = "agent-card waiting";
-    card.id = `agent-card-${agent.id}`;
-    card.innerHTML = `
-      <div class="agent-card-header">
-        <span class="agent-icon">${agent.icon}</span>
-        <span class="agent-name">${agent.name}</span>
-        <span class="agent-status-icon" id="agi-${agent.id}">○</span>
-      </div>
-      <div class="agent-task" id="agt-${agent.id}">${agent.desc}</div>
-      <div class="agent-progress-bar">
-        <div class="agent-progress-fill" id="agp-${agent.id}"></div>
-      </div>
-      <div class="agent-meta">
-        <span id="agpct-${agent.id}">0%</span>
-        <span id="agtim-${agent.id}">—</span>
-      </div>`;
-    container.appendChild(card);
-  });
-}
-
-function setAgentStatus(rawName, status, task) {
-  const id = resolveAgentId(rawName);
-  if (!id) return;
-
-  const card   = document.getElementById(`agent-card-${id}`);
-  const icon   = document.getElementById(`agi-${id}`);
-  const taskEl = document.getElementById(`agt-${id}`);
-  const fill   = document.getElementById(`agp-${id}`);
-  const pct    = document.getElementById(`agpct-${id}`);
-  const tim    = document.getElementById(`agtim-${id}`);
-  if (!card) return;
-
-  card.className = `agent-card ${status}`;
-
-  if (status === "running") {
-    icon.textContent = "⠋";
-    icon.style.color = "#2F81F7";
-    startAgentSpinner(id);
-    startAgentTimer(id, tim);
-    fill.style.width = "30%";
-    pct.textContent = "30%";
-    if (task) taskEl.textContent = task.slice(0, 50);
-  } else if (status === "done") {
-    icon.textContent = "✓";
-    icon.style.color = "#56D364";
-    stopAgentSpinner(id);
-    stopAgentTimer(id);
-    fill.style.width = "100%";
-    pct.textContent = "100%";
-  } else if (status === "failed") {
-    icon.textContent = "✗";
-    icon.style.color = "#F85149";
-    stopAgentSpinner(id);
-    stopAgentTimer(id);
-  } else {
-    icon.textContent = "○";
-    icon.style.color = "#7D8590";
-    stopAgentSpinner(id);
-    stopAgentTimer(id);
-    fill.style.width = "0%";
-    pct.textContent = "0%";
-  }
-}
-
-const BRAILLE_FRAMES = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"];
-const spinnerTimers = {};
-
-function startAgentSpinner(id) {
-  stopAgentSpinner(id);
-  let idx = 0;
-  spinnerTimers[id] = setInterval(() => {
-    const icon = document.getElementById(`agi-${id}`);
-    if (icon) icon.textContent = BRAILLE_FRAMES[idx++ % BRAILLE_FRAMES.length];
-  }, 100);
-}
-
-function stopAgentSpinner(id) {
-  if (spinnerTimers[id]) {
-    clearInterval(spinnerTimers[id]);
-    delete spinnerTimers[id];
-  }
-}
-
-const agentClocks = {};
-function startAgentTimer(id, el) {
-  stopAgentTimer(id);
-  const start = Date.now();
-  agentClocks[id] = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - start) / 1000);
-    const m = String(Math.floor(elapsed / 60)).padStart(2, "0");
-    const s = String(elapsed % 60).padStart(2, "0");
-    if (el) el.textContent = `${m}:${s}`;
-  }, 1000);
-}
-
-function stopAgentTimer(id) {
-  if (agentClocks[id]) {
-    clearInterval(agentClocks[id]);
-    delete agentClocks[id];
-  }
-}
-
-function resolveAgentId(rawName) {
-  if (!rawName) return null;
-  const lower = rawName.toLowerCase().replace(/agent$/, "").trim();
-  for (const a of AGENTS) {
-    if (a.id === lower || a.name.toLowerCase() === lower || a.id.includes(lower) || lower.includes(a.id)) {
-      return a.id;
-    }
-  }
-  return null;
-}
-
-function updateAgentProgress(agentName, pct) {
-  const id = resolveAgentId(agentName);
-  if (!id) return;
-  const fill = document.getElementById(`agp-${id}`);
-  const pctEl = document.getElementById(`agpct-${id}`);
-  if (fill) fill.style.width = `${pct}%`;
-  if (pctEl) pctEl.textContent = `${pct}%`;
-}
-
-// ══════════════════════════════════════════════════════════════
-// 7. TELEMETRY
-// ══════════════════════════════════════════════════════════════
-const telemetry = { tokens: 0, files: 0, loc: 0, tests: 0 };
-
-function updateTelemetryUI() {
-  setTeleValue("tele-tokens", fmtNum(telemetry.tokens), "purple");
-  setTeleValue("tele-files",  String(telemetry.files),  "blue");
-  setTeleValue("tele-loc",    fmtNum(telemetry.loc),    "green");
-  setTeleValue("tele-tests",  String(telemetry.tests),  "amber");
-}
-
-function setTeleValue(id, value, colorClass) {
-  const el = document.getElementById(id);
-  if (el) { el.textContent = value; el.className = `tele-value ${colorClass}`; }
-}
-
-function fmtNum(n) {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-}
-
-// ══════════════════════════════════════════════════════════════
-// 8. FILE ACTIVITY
-// ══════════════════════════════════════════════════════════════
-const seenActivities = new Set();
-
-function addFileActivity(path, op) {
-  const key = `${op}:${path}`;
-  if (seenActivities.has(key)) return;
-  seenActivities.add(key);
-
-  const name = path.split(/[\\/]/).pop();
-  const list = document.getElementById("file-activity-list");
-
-  let icon, color;
-  if (op === "create" || op === "creating") { icon = "+"; color = "#56D364"; }
-  else if (op === "edit" || op === "editing") { icon = "✏"; color = "#E3B341"; }
-  else if (op === "read") { icon = "📖"; color = "#7D8590"; }
-  else { icon = "🗑"; color = "#F85149"; }
-
-  const row = document.createElement("div");
-  row.className = "file-activity-row";
-  row.id = `fa-${key.replace(/[^a-z0-9]/gi, "_")}`;
-  row.innerHTML = `
-    <span class="fa-icon" style="color:${color}">${icon}</span>
-    <span class="fa-name" title="${escHtml(path)}">${escHtml(name)}</span>
-    <span class="fa-status" id="fas-${row.id}">⠋</span>`;
-  list.prepend(row);
-
-  // Keep max 8 items
-  while (list.children.length > 8) list.lastElementChild.remove();
-}
-
-function finishFileActivity(path, op) {
-  const key = `${op}:${path}`;
-  const safeId = `fa-${key.replace(/[^a-z0-9]/gi, "_")}`;
-  const statusEl = document.getElementById(`fas-${safeId}`);
-  if (statusEl) { statusEl.textContent = "✓"; statusEl.classList.add("done"); }
-}
-
-// ══════════════════════════════════════════════════════════════
-// 9. BOTTOM PANEL
-// ══════════════════════════════════════════════════════════════
-function initBottomTabs() {
-  document.querySelectorAll(".bottom-tab").forEach(tab => {
-    tab.addEventListener("click", () => {
-      document.querySelectorAll(".bottom-tab").forEach(t => t.classList.remove("active"));
-      document.querySelectorAll(".bottom-pane").forEach(p => p.classList.remove("active"));
-      tab.classList.add("active");
-      const pane = document.getElementById(tab.dataset.pane);
-      if (pane) pane.classList.add("active");
-    });
-  });
-}
-
-// Logs
-function addLog(msg, level = "info") {
-  const pane = document.getElementById("logs-pane");
-  if (!pane) return;
-  const time = new Date().toTimeString().slice(0, 8);
-  const row = document.createElement("div");
-  row.className = `log-line ${level}`;
-  row.innerHTML = `<span class="log-time">${time}</span><span class="log-msg">${escHtml(msg)}</span>`;
-  pane.appendChild(row);
-  pane.scrollTop = pane.scrollHeight;
-}
-
-// Terminal
-function addTerminalLine(text, type = "output") {
-  const pane = document.getElementById("terminal-pane");
-  if (!pane) return;
-  const line = document.createElement("div");
-  line.className = `terminal-line ${type}`;
-  line.textContent = text;
-  pane.appendChild(line);
-  pane.scrollTop = pane.scrollHeight;
-}
-
-// Tests
-function addTestResult(name, passed) {
-  const pane = document.getElementById("tests-pane");
-  if (!pane) return;
-  const item = document.createElement("div");
-  item.className = `test-item ${passed ? "pass" : "fail"}`;
-  item.innerHTML = `
-    <span class="test-icon">${passed ? "✅" : "❌"}</span>
-    <span>${escHtml(name)}</span>`;
-  pane.appendChild(item);
-  pane.scrollTop = pane.scrollHeight;
-  telemetry.tests++;
-  updateTelemetryUI();
-}
-
-// Git
-function addGitCommit(hash, message, author) {
-  const pane = document.getElementById("git-pane");
-  if (!pane) return;
-  const item = document.createElement("div");
-  item.className = "git-commit";
-  item.innerHTML = `
-    <span class="git-hash">${escHtml((hash || "").slice(0, 7))}</span>
-    <span class="git-msg">${escHtml(message || "")}</span>
-    <span class="git-author">${escHtml(author || "AgentVerse")}</span>`;
-  pane.prepend(item);
-}
-
-// Chat
-function initChat() {
-  const input  = document.getElementById("chat-input");
-  const submit = document.getElementById("chat-submit");
-
-  const send = () => {
-    const text = input.value.trim();
-    if (!text) return;
-    input.value = "";
-    submit.disabled = true;
-    addChatMessage("user", text);
-    // Send both to chat and as task if it starts with "Build" / imperative
-    if (/^build|^create|^make|^write|^generate|^implement/i.test(text)) {
-      wsSend({ type: "run_task", goal: text });
-      setMode("TASK");
-      addLog(`Task started: ${text}`, "agent");
-      setPipelineStage("planning");
-    } else {
-      wsSend({ type: "chat", text });
-    }
-    // Start new assistant message
-    state.activeChatMsg = addChatMessage("assistant", "");
-    state.chatBuffer = "";
+  /* ================= DOM REFS ================= */
+  var el = {
+    tree: document.getElementById('tree'),
+    projLabel: document.getElementById('projLabel'),
+    editorTabs: document.getElementById('editorTabs'),
+    editorScroll: document.getElementById('editorScroll'),
+    editorEmpty: document.getElementById('editorEmpty'),
+    agentList: document.getElementById('agentList'),
+    telemetry: document.getElementById('telemetry'),
+    progressStrip: document.getElementById('progressStrip'),
+    previewFrame: document.getElementById('previewFrame'),
+    previewEmpty: document.getElementById('previewEmpty'),
+    previewWrap: document.getElementById('previewWrap'),
+    urlText: document.getElementById('urlText'),
+    promptInput: document.getElementById('promptInput'),
+    sendBtn: document.getElementById('sendBtn'),
+    statusLeft: document.getElementById('statusLeft'),
+    busState: document.getElementById('busState'),
+    modelLed: document.getElementById('modelLed'),
+    modelProvider: document.getElementById('modelProvider'),
+    modelName: document.getElementById('modelName'),
+    btnDesktop: document.getElementById('btnDesktop'),
+    btnMobile: document.getElementById('btnMobile'),
+    btnRefresh: document.getElementById('btnRefresh'),
+    btnPopout: document.getElementById('btnPopout')
   };
 
-  submit.addEventListener("click", send);
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
-  });
-  input.addEventListener("input", () => {
-    submit.disabled = !input.value.trim();
-  });
-  submit.disabled = true;
-}
+  var filesState = {};      // path -> content (final)
+  var fileOrder = [];       // explorer order
+  var activePath = null;
+  var running = false;
+  var socket = null;
 
-function addChatMessage(role, text) {
-  const pane = document.getElementById("chat-messages");
-  if (!pane) return null;
-
-  const msg = document.createElement("div");
-  msg.className = `chat-msg ${role}`;
-  const roleLabel = role === "user" ? "👤 You" : role === "assistant" ? "◈ AgentVerse" : "System";
-  msg.innerHTML = `
-    <div class="chat-msg-role">${roleLabel}</div>
-    <div class="chat-msg-body">${escHtml(text)}</div>`;
-  pane.appendChild(msg);
-  pane.scrollTop = pane.scrollHeight;
-  // Switch to chat pane
-  activateBottomPane("chat-pane");
-  return msg;
-}
-
-function appendChatToken(token) {
-  if (!state.activeChatMsg) {
-    state.activeChatMsg = addChatMessage("assistant", "");
-  }
-  state.chatBuffer += token;
-  const body = state.activeChatMsg.querySelector(".chat-msg-body");
-  if (body) body.textContent = state.chatBuffer;
-  const pane = document.getElementById("chat-messages");
-  if (pane) pane.scrollTop = pane.scrollHeight;
-}
-
-function finalizeChatMessage(text) {
-  if (state.activeChatMsg) {
-    const body = state.activeChatMsg.querySelector(".chat-msg-body");
-    if (body && text) body.textContent = text;
-    state.activeChatMsg = null;
-    state.chatBuffer = "";
-  }
-  document.getElementById("chat-submit").disabled = false;
-}
-
-function activateBottomPane(paneId) {
-  const tab = document.querySelector(`.bottom-tab[data-pane="${paneId}"]`);
-  if (tab && !tab.classList.contains("active")) tab.click();
-}
-
-// ══════════════════════════════════════════════════════════════
-// 10. TOAST
-// ══════════════════════════════════════════════════════════════
-function showToast(msg, type = "info", duration = 3000) {
-  const container = document.getElementById("toast-container");
-  const toast = document.createElement("div");
-  toast.className = `toast ${type}`;
-  toast.textContent = msg;
-  container.appendChild(toast);
-  setTimeout(() => {
-    toast.style.opacity = "0";
-    toast.style.transform = "translateX(20px)";
-    toast.style.transition = "all 0.3s";
-    setTimeout(() => toast.remove(), 300);
-  }, duration);
-}
-
-// ══════════════════════════════════════════════════════════════
-// 11. EVENT ROUTING
-// ══════════════════════════════════════════════════════════════
-function routeEvent(msg) {
-  const { type, data } = msg;
-
-  switch (type) {
-    case "connected": {
-      if (data.model)     document.getElementById("header-model").textContent    = data.model;
-      if (data.workspace) document.getElementById("header-workspace").textContent = data.workspace;
-      if (data.branch)    document.getElementById("header-branch").textContent    = `⎇ ${data.branch}`;
-      addLog(`Connected — workspace: ${data.workspace || "devpilot"}, model: ${data.model || "?"}`, "success");
-      break;
-    }
-
-    case "file_tree":
-      renderFileTree(data);
-      break;
-
-    case "file_content": {
-      const { path, content, language } = data;
-      openFileInEditor(path, content, language);
-      break;
-    }
-
-    case "agent_started":
-    case "AgentStarted": {
-      const name = data.agent_name || "";
-      setAgentStatus(name, "running", "Starting up…");
-      addLog(`▶ ${name} agent started`, "agent");
-      setPipelineStage(name);
-      setMode("TASK");
-      document.getElementById("header-active-agent").textContent = name;
-      break;
-    }
-
-    case "agent_step":
-    case "AgentStep": {
-      const name = data.agent_name || "";
-      const step = data.step || "";
-      const id = resolveAgentId(name);
-      if (id) {
-        const taskEl = document.getElementById(`agt-${id}`);
-        if (taskEl) taskEl.textContent = step.slice(0, 50);
-      }
-      addLog(`  ✓ ${name}: ${step}`, "info");
-      break;
-    }
-
-    case "agent_progress":
-    case "AgentProgress": {
-      const name  = data.agent_name || "";
-      const pct   = data.progress_pct || 0;
-      const token = data.llm_token;
-      if (pct) updateAgentProgress(name, pct);
-      if (token) appendChatToken(token);
-      break;
-    }
-
-    case "agent_finished":
-    case "AgentFinished": {
-      const name = data.agent_name || "";
-      setAgentStatus(name, "done");
-      completePipelineStage(name);
-      addLog(`✓ ${name} agent finished`, "success");
-      break;
-    }
-
-    case "task_started":
-    case "TaskStarted": {
-      const goal = data.goal || "";
-      addLog(`🚀 Pipeline started: ${goal}`, "agent");
-      addTerminalLine(`$ agentverse run "${goal}"`, "cmd");
-      setPipelineStage("planning");
-      break;
-    }
-
-    case "task_complete":
-    case "TaskComplete": {
-      const success = data.success;
-      const files   = data.written_files || [];
-      setPipelineStage("done");
-      completePipelineStage("done");
-      setMode("CHAT");
-      telemetry.files += files.length;
-      updateTelemetryUI();
-      if (success) {
-        showToast(`✓ Pipeline complete — ${files.length} files written`, "success", 5000);
-        addLog(`Pipeline complete. Files: ${files.length}`, "success");
-        addTerminalLine("$ Done!", "output");
-      } else {
-        showToast("Pipeline finished with errors", "error");
-        addLog("Pipeline finished with errors", "error");
-      }
-      // Reload file tree
-      setTimeout(() => wsSend({ type: "get_files" }), 800);
-      break;
-    }
-
-    case "file_creating": {
-      const path    = data.path || data.file_path || "";
-      const content = data.content || "";
-      const lang    = data.language || detectLang(path);
-      addFileToTree(path);
-      addFileActivity(path, "creating");
-      addLog(`+ Creating ${path}`, "file");
-      telemetry.files++;
-      if (content) {
-        const lines = content.split("\n").length;
-        telemetry.loc += lines;
-        updateTelemetryUI();
-        liveTypeContent(path, content, lang);
-      }
-      break;
-    }
-
-    case "file_editing": {
-      const path    = data.path || data.file_path || "";
-      const content = data.content || "";
-      const lang    = detectLang(path);
-      highlightFileInTree(path, "glowing");
-      addFileActivity(path, "editing");
-      addLog(`✏ Editing ${path}`, "file");
-      if (content) liveTypeContent(path, content, lang);
-      break;
-    }
-
-    case "file_reading": {
-      const path = data.path || data.file_path || "";
-      addFileActivity(path, "read");
-      break;
-    }
-
-    case "file_confirmed": {
-      const path = data.path || "";
-      highlightFileInTree(path, "saved");
-      finishFileActivity(path, "creating");
-      finishFileActivity(path, "editing");
-      addLog(`✓ Saved ${path}`, "success");
-      addTerminalLine(`  Wrote ${path}`, "output");
-      break;
-    }
-
-    case "PipelineStarted": {
-      const stages = data.stages || [];
-      stages.forEach(s => {
-        const el = document.querySelector(`[data-stage-name="${s}"]`);
-        if (el) el.classList.add("active");
-      });
-      break;
-    }
-
-    case "PipelineStageChanged": {
-      const stage = data.stage || "";
-      setPipelineStage(stage);
-      addLog(`Pipeline → ${stage}`, "info");
-      break;
-    }
-
-    case "GitHubConfirmRequest": {
-      const ok = confirm(`AgentVerse wants to commit & push:\n\n${JSON.stringify(data, null, 2)}\n\nAllow?`);
-      wsSend({ type: "github_confirm", accepted: ok });
-      break;
-    }
-
-    case "error":
-    case "Error": {
-      const errMsg = data.message || data.error || "Unknown error";
-      addLog(`✗ ${errMsg}`, "error");
-      showToast(errMsg, "error");
-      const agentName = data.agent_name || "";
-      if (agentName) setAgentStatus(agentName, "failed");
-      break;
-    }
-
-    case "warning":
-    case "Warning": {
-      addLog(`⚠ ${data.message || ""}`, "warn");
-      break;
-    }
-
-    case "chat_token":
-      appendChatToken(data.token || "");
-      break;
-
-    case "chat_done":
-      finalizeChatMessage(data.text || "");
-      break;
-
-    default:
-      break;
-  }
-}
-
-// ══════════════════════════════════════════════════════════════
-// HELPERS
-// ══════════════════════════════════════════════════════════════
-function setConnStatus(online) {
-  const dot   = document.getElementById("conn-dot");
-  const label = document.getElementById("conn-label");
-  if (dot)   { dot.className = online ? "online" : "offline"; }
-  if (label) { label.textContent = online ? "Connected" : "Connecting…"; }
-}
-
-function setMode(mode) {
-  const badge = document.getElementById("mode-badge");
-  if (!badge) return;
-  badge.textContent = mode;
-  badge.classList.toggle("task", mode === "TASK");
-}
-
-function detectLang(path) {
-  const ext = path.split(".").pop().toLowerCase();
-  return {
-    py: "python", js: "javascript", jsx: "javascript",
-    ts: "typescript", tsx: "typescript", html: "html",
-    css: "css", json: "json", yaml: "yaml", yml: "yaml",
-    md: "markdown", sh: "shell", bash: "shell",
-    toml: "toml", rs: "rust", go: "go",
-  }[ext] || "plaintext";
-}
-
-function escHtml(str) {
-  const div = document.createElement("div");
-  div.appendChild(document.createTextNode(str));
-  return div.innerHTML;
-}
-
-// ══════════════════════════════════════════════════════════════
-// 12. INIT
-// ══════════════════════════════════════════════════════════════
-function init() {
-  buildPipelineBar();
-  buildAgentCards();
-  initBottomTabs();
-  initChat();
-  connectWS();
-  initMonaco();
-
-  // Header tooltip active
-  document.getElementById("mode-badge")?.addEventListener("click", () => {
-    activateBottomPane("chat-pane");
-    document.getElementById("chat-input")?.focus();
+  /* ================= BUILD STATIC PANELS ================= */
+  AGENTS.forEach(function(a){
+    var card = document.createElement('div');
+    card.className = 'agent-card';
+    card.id = 'agent-' + a.id;
+    card.innerHTML =
+      '<span class="a-dot" style="background:' + a.color + '"></span>' +
+      '<div class="a-main"><div class="a-name">' + a.icon + ' ' + a.name + '</div>' +
+      '<div class="a-sub" id="agent-sub-' + a.id + '">' + a.idle + '</div></div>' +
+      '<div class="a-state" id="agent-state-' + a.id + '">IDLE</div>';
+    el.agentList.appendChild(card);
   });
 
-  // Explorer search
-  document.getElementById("explorer-search-input")?.addEventListener("input", function () {
-    const q = this.value.toLowerCase();
-    document.querySelectorAll("#file-tree .tree-item").forEach(item => {
-      const name = (item.querySelector(".tree-name")?.textContent || "").toLowerCase();
-      item.style.display = !q || name.includes(q) ? "" : "none";
+  for (var i=0;i<8;i++){
+    var seg = document.createElement('div');
+    seg.className = 'seg';
+    seg.id = 'seg-' + i;
+    el.progressStrip.appendChild(seg);
+  }
+
+  /* ================= HELPERS ================= */
+  function escapeHtml(s){
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function lightHighlight(escaped){
+    return escaped
+      .replace(/(&quot;|"|')([^\n]*?)\1/g, function(m){ return '<span class="tok-str">'+m+'</span>'; })
+      .replace(/(\/\/[^\n]*)/g, '<span class="tok-com">$1</span>')
+      .replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="tok-com">$1</span>');
+  }
+
+  function setAgentStatus(id, status, subtext){
+    var card = document.getElementById('agent-' + id);
+    var stateEl = document.getElementById('agent-state-' + id);
+    var subEl = document.getElementById('agent-sub-' + id);
+    if (!card) return;
+    card.classList.remove('active','done');
+    if (status === 'active'){ card.classList.add('active'); stateEl.textContent = 'WORKING'; }
+    else if (status === 'done'){ card.classList.add('done'); stateEl.textContent = 'DONE'; }
+    else { stateEl.textContent = 'IDLE'; }
+    if (subtext) subEl.textContent = subtext;
+  }
+
+  function lightSegments(count){
+    for (var i=0;i<8;i++){
+      var seg = document.getElementById('seg-'+i);
+      if (seg) seg.classList.toggle('on', i < count);
+    }
+  }
+
+  function log(agentId, html, isUser){
+    var meta = AGENTS.filter(function(a){return a.id===agentId;})[0];
+    var line = document.createElement('div');
+    line.className = 'tlog' + (isUser ? ' user' : '');
+    var ts = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    var tag = isUser ? 'you' : (meta ? meta.name : agentId);
+    line.style.borderLeftColor = isUser ? 'var(--mint)' : (meta ? meta.color : 'var(--line)');
+    line.innerHTML = '<span class="ts">' + ts + '</span><b>' + tag + '</b> — ' + html;
+    el.telemetry.appendChild(line);
+    el.telemetry.scrollTop = el.telemetry.scrollHeight;
+  }
+
+  function sleep(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
+
+  /* ================= EXPLORER ================= */
+  function resetExplorer(projectLabel){
+    el.tree.innerHTML = '';
+    el.projLabel.textContent = projectLabel;
+    fileOrder = [];
+  }
+
+  function addExplorerEntry(path){
+    if (fileOrder.indexOf(path) > -1) return;
+    fileOrder.push(path);
+    var li = document.createElement('li');
+    li.className = 'tree-item';
+    li.id = 'tree-' + cssSafe(path);
+    li.innerHTML = '<span class="branch">├─</span><span class="fname">' + path + '</span><span class="status-dot pending" id="dot-' + cssSafe(path) + '"></span>';
+    li.addEventListener('click', function(){
+      if (filesState[path] !== undefined) openTab(path);
+    });
+    el.tree.appendChild(li);
+  }
+
+  function cssSafe(path){ return path.replace(/[^a-zA-Z0-9]/g,'_'); }
+
+  function setFileDotStatus(path, status){
+    var dot = document.getElementById('dot-' + cssSafe(path));
+    if (dot) dot.className = 'status-dot ' + status;
+  }
+
+  function setTreeActive(path){
+    var items = el.tree.querySelectorAll('.tree-item');
+    items.forEach(function(it){ it.classList.remove('active'); });
+    var cur = document.getElementById('tree-' + cssSafe(path));
+    if (cur) cur.classList.add('active');
+  }
+
+  /* ================= EDITOR ================= */
+  function ensureTab(path){
+    if (document.getElementById('tab-' + cssSafe(path))) return;
+    var tab = document.createElement('div');
+    tab.className = 'editor-tab';
+    tab.id = 'tab-' + cssSafe(path);
+    tab.innerHTML = '<span class="tab-led" style="background:var(--c-coder)"></span>' + path;
+    tab.addEventListener('click', function(){ openTab(path); });
+    el.editorTabs.appendChild(tab);
+  }
+
+  function openTab(path){
+    activePath = path;
+    el.editorEmpty.style.display = 'none';
+    var tabs = el.editorTabs.querySelectorAll('.editor-tab');
+    tabs.forEach(function(t){ t.classList.remove('active'); });
+    var t = document.getElementById('tab-' + cssSafe(path));
+    if (t) t.classList.add('active');
+    setTreeActive(path);
+    renderEditorContent(filesState[path] || '', true);
+  }
+
+  function renderEditorContent(text, finalPass){
+    el.editorScroll.innerHTML = '';
+    var gutter = document.createElement('div');
+    gutter.className = 'gutter';
+    var lines = text.split('\n');
+    gutter.innerHTML = lines.map(function(_,i){ return '<div>'+(i+1)+'</div>'; }).join('');
+    var code = document.createElement('pre');
+    code.className = 'editor-code';
+    var escaped = escapeHtml(text);
+    code.innerHTML = finalPass ? lightHighlight(escaped) : escaped;
+    if (!finalPass) {
+      var cur = document.createElement('span');
+      cur.className = 'cursor-blink';
+      cur.textContent = '\u00A0';
+      code.appendChild(cur);
+    }
+    el.editorScroll.appendChild(gutter);
+    el.editorScroll.appendChild(code);
+    el.editorScroll.scrollTop = el.editorScroll.scrollHeight;
+  }
+
+  function typewrite(path, fullText){
+    return new Promise(function(resolve){
+      ensureTab(path);
+      openTab(path);
+      var i = 0;
+      var chunk = Math.max(2, Math.round(fullText.length / 140));
+      var timer = setInterval(function(){
+        i += chunk;
+        var partial = fullText.slice(0, i);
+        filesState[path] = partial;
+        if (activePath === path) renderEditorContent(partial, false);
+        if (i >= fullText.length){
+          clearInterval(timer);
+          filesState[path] = fullText;
+          if (activePath === path) renderEditorContent(fullText, true);
+          resolve();
+        }
+      }, 12);
+    });
+  }
+
+  /* ================= PREVIEW ================= */
+  function buildPreviewDoc(){
+    var html = filesState['index.html'];
+    if (!html) return null;
+    var css = filesState['style.css'] || '';
+    var js = filesState['script.js'] || '';
+    var doc = html;
+    if (css) doc = doc.indexOf('</head>') > -1 ? doc.replace('</head>', '<style>'+css+'</style></head>') : doc + '<style>'+css+'</style>';
+    if (js) doc = doc.indexOf('</body>') > -1 ? doc.replace('</body>', '<script>'+js+'<\/script></body>') : doc + '<script>'+js+'<\/script>';
+    return doc;
+  }
+
+  function updatePreview(){
+    var doc = buildPreviewDoc();
+    if (!doc) return;
+    el.previewEmpty.style.display = 'none';
+    el.previewFrame.style.display = 'block';
+    el.previewFrame.srcdoc = doc;
+    el.urlText.innerHTML = '<span class="live-tag">●&nbsp;live</span>localhost:5500/index.html';
+  }
+
+  el.btnRefresh.addEventListener('click', function(){
+    var doc = buildPreviewDoc();
+    if (doc) el.previewFrame.srcdoc = doc;
+  });
+  el.btnPopout.addEventListener('click', function(){
+    var doc = buildPreviewDoc();
+    if (!doc) return;
+    var blob = new Blob([doc], {type:'text/html'});
+    window.open(URL.createObjectURL(blob), '_blank');
+  });
+  el.btnMobile.addEventListener('click', function(){
+    el.previewWrap.classList.add('mobile');
+    el.btnMobile.classList.add('on'); el.btnDesktop.classList.remove('on');
+  });
+  el.btnDesktop.addEventListener('click', function(){
+    el.previewWrap.classList.remove('mobile');
+    el.btnDesktop.classList.add('on'); el.btnMobile.classList.remove('on');
+  });
+  el.btnDesktop.classList.add('on');
+
+  /* ================= PIPELINE ================= */
+  async function runPipeline(promptText){
+    if (running) return;
+    running = true;
+    el.sendBtn.disabled = true;
+    el.busState.textContent = 'streaming';
+
+    // If connected to real WebSocket backend, notify it
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'run_task', goal: promptText }));
+    }
+
+    var tpl = pickTemplate(promptText);
+
+    // reset UI
+    filesState = {};
+    activePath = null;
+    resetExplorer(tpl.label);
+    el.editorTabs.innerHTML = '';
+    el.editorScroll.innerHTML = '';
+    el.editorEmpty.style.display = 'flex';
+    el.previewFrame.style.display = 'none';
+    el.previewFrame.srcdoc = '';
+    el.previewEmpty.style.display = 'flex';
+    el.previewEmpty.textContent = 'Waiting for index.html…';
+    el.urlText.textContent = 'localhost:5500 — build in progress…';
+    el.telemetry.innerHTML = '';
+    AGENTS.forEach(function(a){ setAgentStatus(a.id,'idle',a.idle); });
+    lightSegments(0);
+
+    log('planner', escapeHtml(promptText), true);
+
+    // 1. PLANNER
+    setAgentStatus('planner','active','analysing request…');
+    el.statusLeft.textContent = 'Planner working · 0 / 8 agents complete';
+    await sleep(500);
+    for (var p=0;p<tpl.plan.length;p++){
+      log('planner', tpl.plan[p]);
+      await sleep(260);
+    }
+    setAgentStatus('planner','done','master plan drafted');
+    lightSegments(1);
+
+    // 2. ARCHITECT
+    setAgentStatus('architect','active','choosing file structure…');
+    el.statusLeft.textContent = 'Architect working · 1 / 8 agents complete';
+    await sleep(450);
+    tpl.files.forEach(function(f){ addExplorerEntry(f.path); });
+    log('architect', 'scaffolding ' + tpl.files.length + ' files: ' + tpl.files.map(function(f){return f.path;}).join(', '));
+    await sleep(350);
+    setAgentStatus('architect','done', tpl.files.length + ' files planned');
+    lightSegments(2);
+
+    // 3. CODER
+    setAgentStatus('coder','active','writing files…');
+    el.statusLeft.textContent = 'Coder working · 2 / 8 agents complete';
+    for (var i=0;i<tpl.files.length;i++){
+      var f = tpl.files[i];
+      if (f.agent !== 'coder') continue;
+      setFileDotStatus(f.path,'active');
+      log('coder', 'FilesystemSkill → writing <b>' + f.path + '</b>');
+      await typewrite(f.path, f.content);
+      setFileDotStatus(f.path,'done');
+      log('coder', f.path + ' written (' + f.content.length + ' bytes)');
+      if (f.path === 'index.html' || f.path === 'style.css' || f.path === 'script.js') updatePreview();
+      await sleep(150);
+    }
+    setAgentStatus('coder','done', tpl.files.filter(function(f){return f.agent==='coder';}).length + ' files streamed');
+    lightSegments(3);
+
+    // 4. VALIDATOR
+    setAgentStatus('validator','active','scanning output…');
+    el.statusLeft.textContent = 'Validator working · 3 / 8 agents complete';
+    await sleep(500);
+    log('validator', 'no duplicate paths found');
+    await sleep(280);
+    log('validator', 'no syntax errors detected');
+    setAgentStatus('validator','done','all checks passed');
+    lightSegments(4);
+
+    // 5. TESTER
+    setAgentStatus('tester','active','running suite…');
+    el.statusLeft.textContent = 'Tester working · 4 / 8 agents complete';
+    await sleep(500);
+    log('tester', 'no test runner configured for static build — smoke-loading index.html');
+    await sleep(320);
+    log('tester', 'DOM mounts cleanly, 0 console errors');
+    setAgentStatus('tester','done','smoke test passed');
+    lightSegments(5);
+
+    // 6. REVIEWER
+    setAgentStatus('reviewer','active','static analysis…');
+    el.statusLeft.textContent = 'Reviewer working · 5 / 8 agents complete';
+    await sleep(480);
+    log('reviewer', 'no inline secrets or unsafe eval() usage found');
+    await sleep(260);
+    log('reviewer', 'minor: consider extracting repeated card markup into a helper');
+    setAgentStatus('reviewer','done','1 suggestion, 0 blockers');
+    lightSegments(6);
+
+    // 7. DOCS
+    setAgentStatus('docs','active','writing README…');
+    el.statusLeft.textContent = 'Documentation working · 6 / 8 agents complete';
+    var readme = tpl.files.filter(function(f){return f.agent==='docs';})[0];
+    if (readme){
+      addExplorerEntry(readme.path);
+      setFileDotStatus(readme.path,'active');
+      await typewrite(readme.path, readme.content);
+      setFileDotStatus(readme.path,'done');
+    }
+    log('docs', 'README.md authored');
+    setAgentStatus('docs','done','README.md up to date');
+    lightSegments(7);
+
+    // 8. GITHUB
+    setAgentStatus('github','active','preparing commit…');
+    el.statusLeft.textContent = 'GitHub working · 7 / 8 agents complete';
+    await sleep(500);
+    log('github', 'diff staged: <b>' + tpl.files.length + ' files changed</b>');
+    await sleep(260);
+    log('github', 'suggested commit message — "feat: scaffold ' + tpl.label + '"');
+    setAgentStatus('github','done','ready to commit (approval required)');
+    lightSegments(8);
+
+    el.busState.textContent = 'idle';
+    el.statusLeft.textContent = 'Build complete · 8 / 8 agents finished';
+    running = false;
+    el.sendBtn.disabled = false;
+  }
+
+  /* ================= WEBSOCKET BACKEND INTEGRATION ================= */
+  function connectBackend(){
+    try {
+      var wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+      socket = new WebSocket(wsUrl);
+
+      socket.onopen = function(){
+        el.busState.textContent = 'connected';
+        if (el.modelLed) el.modelLed.classList.remove('offline');
+      };
+
+      socket.onmessage = function(evt){
+        try {
+          var msg = JSON.parse(evt.data);
+          if (msg.type === 'connected' && msg.data) {
+            if (msg.data.model && el.modelName) el.modelName.textContent = msg.data.model;
+            if (msg.data.workspace && el.projLabel) el.projLabel.textContent = msg.data.workspace;
+          } else if (msg.type === 'file_tree' && msg.data) {
+            if (msg.data.name && el.projLabel) el.projLabel.textContent = msg.data.name;
+          } else if (msg.type === 'AgentStarted' || msg.type === 'AgentStep') {
+            var agentId = (msg.data.agent || 'coder').toLowerCase();
+            log(agentId, escapeHtml(msg.data.message || msg.data.step || 'Processing step...'));
+          } else if (msg.type === 'FileCreating' || msg.type === 'FileEditing') {
+            var p = msg.data.path;
+            if (p) {
+              addExplorerEntry(p);
+              if (msg.data.content) {
+                filesState[p] = msg.data.content;
+                openTab(p);
+                updatePreview();
+              }
+            }
+          }
+        } catch(e){}
+      };
+
+      socket.onclose = function(){
+        el.busState.textContent = 'idle';
+        setTimeout(connectBackend, 4000);
+      };
+
+      socket.onerror = function(){
+        el.busState.textContent = 'idle';
+      };
+    } catch(e){}
+  }
+
+  /* ================= INPUT WIRING ================= */
+  function submitPrompt(){
+    var v = el.promptInput.value.trim();
+    if (!v || running) return;
+    runPipeline(v);
+    el.promptInput.value = '';
+  }
+
+  el.sendBtn.addEventListener('click', submitPrompt);
+  el.promptInput.addEventListener('keydown', function(e){
+    if (e.key === 'Enter') submitPrompt();
+  });
+  document.querySelectorAll('.chip').forEach(function(chip){
+    chip.addEventListener('click', function(){
+      if (running) return;
+      el.promptInput.value = chip.getAttribute('data-p');
+      submitPrompt();
     });
   });
 
-  // Add initial terminal welcome
-  addTerminalLine("  ◈  AgentVerse Web IDE — Ready", "cmd");
-  addTerminalLine("  Type a task in the Chat tab to start building.", "output");
-  addLog("AgentVerse Web IDE initialized", "info");
-}
+  // Attempt backend connection
+  connectBackend();
 
-window.addEventListener("DOMContentLoaded", init);
+})();

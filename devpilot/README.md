@@ -1,48 +1,58 @@
-# Health Tracker
+# Student Mark Allocator
 
 ## Short Description
-A simple health tracker application that allows users to log their diet and workout activities for better understanding of their daily habits.
+A web application for staffs to award marks to students in a school management system.
 
 ## Tech Stack
-- **React**: Frontend framework for building user interfaces.
-- **Node.js**: Backend server using Express for handling requests and managing database interactions.
-- **MongoDB**: NoSQL database for storing user data, including diet entries and workout logs.
+- Flask: Web framework for building APIs.
+- SQLAlchemy: ORM for interacting with a relational database.
+- pytest: Testing library for writing and running tests.
 
 ## Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/health-tracker.git
+   git clone https://github.com/yourusername/student-mark-allocator.git
+   cd student-mark-allocator
    ```
-2. Navigate to the project directory:
+2. Create virtual environment:
    ```bash
-   cd health-tracker
+   python3 -m venv env
+   source env/bin/activate  # On Windows use `env\Scripts\activate`
    ```
-3. Install dependencies:
+3. Install project dependencies:
    ```bash
-   npm install
+   pip install -r requirements.txt
    ```
 
 ## Usage
-1. Start the backend server:
+1. Run the development server:
    ```bash
-   node src/server.js
+   flask run
    ```
-2. Open your browser and navigate to `http://localhost:5000` to access the application.
-3. Log diet entries by visiting `/diet` and entering details in the form.
-4. Record workout activities by navigating to `/workout` and filling out the form with relevant information.
+2. Access the application in your browser at [http://localhost:5000](http://localhost:5000).
 
 ## Project Structure
-- **src/**:
-  - Contains all frontend components (`App.js`, `DietTracker.js`, `WorkoutLog.js`) and utility functions for data storage (`dataStorage.js`).
-  - Also includes unit tests (`tests/unit/App.test.js`).
 
-- **tests/**:
-  - Contains test files for the main application component.
+- **`app/main.py`**: Defines API endpoints for mark allocation.
+  - This file contains the main logic of the application, including routes and controllers.
+
+- **`app/models.py`**: Models for student marks and staff awards.
+  - Contains classes representing entities in the database schema (e.g., `Student`, `Mark`, `StaffAward`).
+
+- **`db/schema.sql`**: Creates the database schema.
+  - This file contains SQL commands to create tables, indexes, etc. that are used by the application.
+
+- **`tests/test_main.py`**: Unit tests on the mark allocation system.
+  - Contains test cases for various functionalities of the application using pytest.
 
 ## Running Tests
-1. Ensure you have Node.js installed on your system.
-2. Navigate to the project directory and run:
+1. Install pytest if you haven't already:
    ```bash
-   npm test
+   pip install pytest
    ```
-This will execute all unit tests in the `src/components` folder, ensuring that components are functioning as expected.
+2. Run the unit tests:
+   ```bash
+   pytest
+   ```
+
+This README provides a comprehensive guide to setting up, running, and testing your project.

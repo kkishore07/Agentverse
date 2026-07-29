@@ -1,254 +1,106 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AgentVerse — AI Software Development IDE</title>
-  <meta name="description" content="AgentVerse Autonomous AI Software Development Team — Browser-based IDE with live code generation, agent pipeline, and Monaco editor.">
-
-  <!-- Monaco Editor CSS (must load before app) -->
-  <link rel="stylesheet"
-        data-name="vs/editor/editor.main"
-        href="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/editor/editor.main.css">
-
-  <!-- App Styles -->
-  <link rel="stylesheet" href="/static/style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DevPilot — Web IDE</title>
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<div id="app">
+<div class="app">
 
-  <!-- ══════════════════════════════════════════════════════
-       TOP HEADER
-       ══════════════════════════════════════════════════════ -->
-  <header id="top-header">
-    <!-- Logo -->
-    <div class="header-logo">
-      <span class="logo-icon">◈</span>
-      AgentVerse
-    </div>
-
-    <span class="header-sep">│</span>
-
-    <!-- Workspace Info Pills -->
-    <div class="header-info">
-      <div class="header-pill">
-        <span class="pill-icon">⌂</span>
-        <span class="pill-val" id="header-workspace">devpilot</span>
-      </div>
-      <div class="header-pill">
-        <span class="pill-icon">⎇</span>
-        <span class="pill-val" id="header-branch">⎇ main</span>
-      </div>
-      <div class="header-pill">
-        <span class="pill-icon">◈</span>
-        <span class="pill-val" id="header-model">—</span>
-      </div>
-      <div class="header-pill" style="display:none">
-        <span class="pill-icon">⚡</span>
-        <span class="pill-val" id="header-active-agent">—</span>
-      </div>
-    </div>
-
-    <div class="header-spacer"></div>
-
-    <!-- Right: Status + Mode -->
-    <div class="header-status">
-      <div id="conn-dot"></div>
-      <span id="conn-label">Connecting…</span>
-    </div>
-
-    <div class="header-mode-badge" id="mode-badge" title="Click to open Chat">CHAT</div>
-  </header>
-
-  <!-- ══════════════════════════════════════════════════════
-       PIPELINE BAR
-       (built dynamically by JS)
-       ══════════════════════════════════════════════════════ -->
-  <div id="pipeline-bar"></div>
-
-  <!-- ══════════════════════════════════════════════════════
-       MAIN 3-COLUMN LAYOUT
-       ══════════════════════════════════════════════════════ -->
-  <div id="main-layout">
-
-    <!-- ── LEFT SIDEBAR ── Explorer ──────────────────────── -->
-    <aside id="left-sidebar">
-      <div class="sidebar-section-header">Explorer</div>
-
-      <div id="explorer-search">
-        <input type="text"
-               id="explorer-search-input"
-               placeholder="Search files…"
-               autocomplete="off">
-      </div>
-
-      <div id="file-tree">
-        <!-- Rendered by JS from WS file_tree event -->
-        <div style="padding:20px 14px;color:#7D8590;font-size:12px">
-          Loading workspace…
-        </div>
-      </div>
-
-      <div id="explorer-footer">
-        <span>⎇</span>
-        <span id="sidebar-branch">main</span>
-      </div>
-    </aside>
-
-    <!-- ── CENTER — EDITOR ────────────────────────────────── -->
-    <main id="editor-area">
-      <!-- Tabs -->
-      <div id="editor-tabs">
-        <!-- Tabs added dynamically by JS -->
-      </div>
-
-      <!-- Breadcrumbs -->
-      <div id="editor-breadcrumbs">
-        <span class="breadcrumb-item" style="color:#7D8590">No file open</span>
-      </div>
-
-      <!-- Monaco Editor Mount Point -->
-      <div id="monaco-container"></div>
-
-      <!-- Status Line (VS Code style blue bar) -->
-      <div id="editor-statusline">
-        <div class="statusline-item">
-          <span>◈ AgentVerse</span>
-        </div>
-        <div class="statusline-item">
-          <span id="editor-language">JavaScript</span>
-        </div>
-        <div class="statusline-item">
-          <span id="editor-ln-col">Ln 1, Col 1</span>
-        </div>
-        <div class="statusline-item">
-          <span>UTF-8</span>
-        </div>
-        <div id="typing-indicator">
-          <span style="font-size:11px">AI generating</span>
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-        </div>
-      </div>
-    </main>
-
-    <!-- ── RIGHT SIDEBAR ── Agents + Telemetry ───────────── -->
-    <aside id="right-sidebar">
-      <!-- Branding -->
-      <div class="right-brand">
-        <div>
-          <div class="right-brand-name">◈ AgentVerse</div>
-          <div class="right-brand-sub">Autonomous AI Dev Team</div>
-        </div>
-      </div>
-
-      <!-- AGENT TEAM -->
-      <div class="right-section-title">⚙ Agent Team</div>
-      <div id="agent-cards">
-        <!-- Built by JS: buildAgentCards() -->
-      </div>
-
-      <!-- FILE ACTIVITY -->
-      <div class="right-section-title">📁 File Activity</div>
-      <div id="file-activity-list">
-        <div style="padding:4px 6px;color:#7D8590;font-size:11.5px">
-          Waiting for activity…
-        </div>
-      </div>
-
-      <!-- TELEMETRY -->
-      <div class="right-section-title">📊 Telemetry</div>
-      <div id="telemetry-grid">
-        <div class="telemetry-card">
-          <div class="tele-label">Tokens</div>
-          <div class="tele-value purple" id="tele-tokens">0</div>
-        </div>
-        <div class="telemetry-card">
-          <div class="tele-label">Files</div>
-          <div class="tele-value blue" id="tele-files">0</div>
-        </div>
-        <div class="telemetry-card">
-          <div class="tele-label">Lines</div>
-          <div class="tele-value green" id="tele-loc">0</div>
-        </div>
-        <div class="telemetry-card">
-          <div class="tele-label">Tests</div>
-          <div class="tele-value amber" id="tele-tests">0</div>
-        </div>
-      </div>
-
-      <!-- small padding at bottom -->
-      <div style="height:12px"></div>
-    </aside>
-  </div>
-
-  <!-- ══════════════════════════════════════════════════════
-       BOTTOM PANEL
-       ══════════════════════════════════════════════════════ -->
-  <div id="bottom-panel">
-    <!-- Tabs -->
-    <div id="bottom-tabs">
-      <button class="bottom-tab active" data-pane="terminal-pane">Terminal</button>
-      <button class="bottom-tab"        data-pane="logs-pane">Logs</button>
-      <button class="bottom-tab"        data-pane="chat-pane">Chat</button>
-      <button class="bottom-tab"        data-pane="tests-pane">Tests</button>
-      <button class="bottom-tab"        data-pane="git-pane">Git</button>
-      <button class="bottom-tab"        data-pane="output-pane">Output</button>
-    </div>
-
-    <!-- Pane Content -->
-    <div id="bottom-content">
-
-      <!-- Terminal -->
-      <div id="terminal-pane" class="bottom-pane active">
-        <div class="terminal-line cmd">
-          <span class="terminal-prompt">agentverse@ide</span>:~$
-        </div>
-      </div>
-
-      <!-- Logs -->
-      <div id="logs-pane" class="bottom-pane"></div>
-
-      <!-- Chat -->
-      <div id="chat-pane" class="bottom-pane" style="display:flex;flex-direction:column;">
-        <div id="chat-messages" style="flex:1;overflow-y:auto;padding:4px 0;">
-          <div class="chat-msg system">
-            <div class="chat-msg-body">
-              Describe what you want to build. The AgentVerse pipeline will plan, architect, code, test, and commit it automatically.
-            </div>
-          </div>
-        </div>
-        <div id="chat-input-area">
-          <input type="text"
-                 id="chat-input"
-                 placeholder="Build a REST API for a todo app…"
-                 autocomplete="off">
-          <button id="chat-submit" disabled>▶ Run</button>
-        </div>
-      </div>
-
-      <!-- Tests -->
-      <div id="tests-pane" class="bottom-pane"></div>
-
-      <!-- Git -->
-      <div id="git-pane" class="bottom-pane"></div>
-
-      <!-- Output -->
-      <div id="output-pane" class="bottom-pane"></div>
-
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span>DEVPILOT <small>web ide</small></div>
+    <div class="topbar-sep"></div>
+    <div class="model-pill"><span class="led" id="modelLed"></span><span id="modelProvider">Ollama</span> · <b id="modelName">qwen2.5-coder:3b</b></div>
+    <div class="model-pill">EventBus <b id="busState">idle</b></div>
+    <div class="topbar-right">
+      <span class="src-note">reimagined from the DevPilot Textual TUI</span>
     </div>
   </div>
 
-</div><!-- #app -->
+  <!-- PROGRESS STRIP -->
+  <div class="progress-strip" id="progressStrip"></div>
 
-<!-- Toast Container (outside app grid) -->
-<div id="toast-container"></div>
+  <!-- MAIN WORKSPACE GRID -->
+  <div class="workspace">
 
-<!-- Monaco Editor Loader -->
-<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+    <!-- EXPLORER -->
+    <div class="panel">
+      <div class="panel-head"><span class="frame">┌─</span> PROJECT EXPLORER</div>
+      <div class="panel-body">
+        <div class="explorer-root">
+          <div class="proj-name">workspace / <b id="projLabel">—</b></div>
+          <ul class="tree" id="tree">
+            <li class="tree-empty">No project yet.<br>Describe what to build below and the agent pipeline will scaffold it here.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
 
-<!-- AgentVerse App -->
+    <!-- EDITOR -->
+    <div class="panel">
+      <div class="panel-head"><span class="frame">┌─</span> CODER · LIVE EDIT</div>
+      <div class="editor-tabs" id="editorTabs"></div>
+      <div class="editor-scroll" id="editorScroll">
+        <div class="editor-empty" id="editorEmpty">
+          &lt;/&gt;<br><br>Files will stream in here as the Coder agent writes them.
+        </div>
+      </div>
+    </div>
+
+    <!-- PREVIEW -->
+    <div class="panel preview-panel">
+      <div class="panel-head"><span class="frame">┌─</span> LIVE PREVIEW</div>
+      <div class="preview-chrome">
+        <div class="traffic"><i></i><i></i><i></i></div>
+        <div class="url-bar"><span class="live-tag">●&nbsp;live</span><span id="urlText">localhost:5500 — waiting for build…</span></div>
+        <button class="chrome-btn" id="btnDesktop">desktop</button>
+        <button class="chrome-btn" id="btnMobile">mobile</button>
+        <button class="chrome-btn" id="btnRefresh" title="reload preview">↻</button>
+        <button class="chrome-btn" id="btnPopout" title="open in new tab">⇱</button>
+      </div>
+      <div class="preview-frame-wrap" id="previewWrap">
+        <div class="preview-empty" id="previewEmpty">index.html will render here<br>the moment the Coder agent finishes the markup.</div>
+        <iframe id="previewFrame" style="display:none;" title="live preview" sandbox="allow-scripts allow-modals allow-forms"></iframe>
+      </div>
+    </div>
+
+    <!-- AGENTS PIPELINE -->
+    <div class="panel">
+      <div class="panel-head"><span class="frame">┌─</span> AGENT PIPELINE</div>
+      <div class="panel-body" style="display:flex;flex-direction:column;">
+        <div class="agent-list" id="agentList"></div>
+        <div class="telemetry-head">EVENTBUS TELEMETRY</div>
+        <div class="telemetry" id="telemetry"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CHAT BAR -->
+  <div class="chatbar">
+    <div class="chips" id="chips">
+      <button class="chip" data-p="Build a personal health dashboard with steps, heart rate and sleep cards">Personal health dashboard</button>
+      <button class="chip" data-p="Build a live IoT sensor monitor showing temperature, humidity and signal strength">IoT sensor monitor</button>
+      <button class="chip" data-p="Build a clean one-page portfolio site">Portfolio site</button>
+    </div>
+    <div class="chatform">
+      <div class="prompt-wrap">
+        <span class="chevron">›</span>
+        <input id="promptInput" type="text" placeholder="Describe what DevPilot should build… e.g. “Create a weather app that calls wttr.in”" />
+      </div>
+      <button class="send-btn" id="sendBtn">Run pipeline</button>
+    </div>
+    <div class="status-line">
+      <span id="statusLeft">Planner idle · 0 / 8 agents complete</span>
+      <span class="right" id="statusRight">Ctrl + Enter to run</span>
+    </div>
+  </div>
+
+</div>
+
 <script src="/static/app.js"></script>
 </body>
 </html>
