@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hello Flask</title>
+</head>
+<body>
+    <h1>Welcome to Hello Flask!</h1>
+    <p>This is the home page of our application.</p>
+
+    {% if user %}
+        <h2>Logged in as: {{ user.username }}</h2>
+        <a href="{{ url_for('logout') }}">Logout</a>
+    {% else %}
+        <h2>Please log in to see your profile.</h2>
+        <a href="{{ url_for('login') }}">Login</a>
+    {% endif %}
+
+    <h3>Recent Posts:</h3>
+    {% for post in posts %}
+        <div class="post">
+            <h4>{{ post.title }}</h4>
+            <p>{{ post.content }}</p>
+            <small>Posted by {{ post.author.username }} on {{ post.created_at }}</small>
+        </div>
+    {% endfor %}
+
+    <form action="{{ url_for('create_post') }}" method="post">
+        <label for="title">Title:</label>
+        <input type="text" id="title" name="title" required>
+
+        <label for="content">Content:</label>
+        <textarea id="content" name="content" rows="5" required></textarea>
+
+        <button type="submit">Create Post</button>
+    </form>
+</body>
+</html>
