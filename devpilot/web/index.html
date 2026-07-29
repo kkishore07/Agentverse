@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentVerse — AI Software Development IDE</title>
+  <meta name="description" content="AgentVerse Autonomous AI Software Development Team — Browser-based IDE with live code generation, agent pipeline, and Monaco editor.">
+
+  <!-- Monaco Editor CSS (must load before app) -->
+  <link rel="stylesheet"
+        data-name="vs/editor/editor.main"
+        href="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/editor/editor.main.css">
+
+  <!-- App Styles -->
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ══════════════════════════════════════════════════════
+       TOP HEADER
+       ══════════════════════════════════════════════════════ -->
+  <header id="top-header">
+    <!-- Logo -->
+    <div class="header-logo">
+      <span class="logo-icon">◈</span>
+      AgentVerse
+    </div>
+
+    <span class="header-sep">│</span>
+
+    <!-- Workspace Info Pills -->
+    <div class="header-info">
+      <div class="header-pill">
+        <span class="pill-icon">⌂</span>
+        <span class="pill-val" id="header-workspace">devpilot</span>
+      </div>
+      <div class="header-pill">
+        <span class="pill-icon">⎇</span>
+        <span class="pill-val" id="header-branch">⎇ main</span>
+      </div>
+      <div class="header-pill">
+        <span class="pill-icon">◈</span>
+        <span class="pill-val" id="header-model">—</span>
+      </div>
+      <div class="header-pill" style="display:none">
+        <span class="pill-icon">⚡</span>
+        <span class="pill-val" id="header-active-agent">—</span>
+      </div>
+    </div>
+
+    <div class="header-spacer"></div>
+
+    <!-- Right: Status + Mode -->
+    <div class="header-status">
+      <div id="conn-dot"></div>
+      <span id="conn-label">Connecting…</span>
+    </div>
+
+    <div class="header-mode-badge" id="mode-badge" title="Click to open Chat">CHAT</div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════
+       PIPELINE BAR
+       (built dynamically by JS)
+       ══════════════════════════════════════════════════════ -->
+  <div id="pipeline-bar"></div>
+
+  <!-- ══════════════════════════════════════════════════════
+       MAIN 3-COLUMN LAYOUT
+       ══════════════════════════════════════════════════════ -->
+  <div id="main-layout">
+
+    <!-- ── LEFT SIDEBAR ── Explorer ──────────────────────── -->
+    <aside id="left-sidebar">
+      <div class="sidebar-section-header">Explorer</div>
+
+      <div id="explorer-search">
+        <input type="text"
+               id="explorer-search-input"
+               placeholder="Search files…"
+               autocomplete="off">
+      </div>
+
+      <div id="file-tree">
+        <!-- Rendered by JS from WS file_tree event -->
+        <div style="padding:20px 14px;color:#7D8590;font-size:12px">
+          Loading workspace…
+        </div>
+      </div>
+
+      <div id="explorer-footer">
+        <span>⎇</span>
+        <span id="sidebar-branch">main</span>
+      </div>
+    </aside>
+
+    <!-- ── CENTER — EDITOR ────────────────────────────────── -->
+    <main id="editor-area">
+      <!-- Tabs -->
+      <div id="editor-tabs">
+        <!-- Tabs added dynamically by JS -->
+      </div>
+
+      <!-- Breadcrumbs -->
+      <div id="editor-breadcrumbs">
+        <span class="breadcrumb-item" style="color:#7D8590">No file open</span>
+      </div>
+
+      <!-- Monaco Editor Mount Point -->
+      <div id="monaco-container"></div>
+
+      <!-- Status Line (VS Code style blue bar) -->
+      <div id="editor-statusline">
+        <div class="statusline-item">
+          <span>◈ AgentVerse</span>
+        </div>
+        <div class="statusline-item">
+          <span id="editor-language">JavaScript</span>
+        </div>
+        <div class="statusline-item">
+          <span id="editor-ln-col">Ln 1, Col 1</span>
+        </div>
+        <div class="statusline-item">
+          <span>UTF-8</span>
+        </div>
+        <div id="typing-indicator">
+          <span style="font-size:11px">AI generating</span>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ── RIGHT SIDEBAR ── Agents + Telemetry ───────────── -->
+    <aside id="right-sidebar">
+      <!-- Branding -->
+      <div class="right-brand">
+        <div>
+          <div class="right-brand-name">◈ AgentVerse</div>
+          <div class="right-brand-sub">Autonomous AI Dev Team</div>
+        </div>
+      </div>
+
+      <!-- AGENT TEAM -->
+      <div class="right-section-title">⚙ Agent Team</div>
+      <div id="agent-cards">
+        <!-- Built by JS: buildAgentCards() -->
+      </div>
+
+      <!-- FILE ACTIVITY -->
+      <div class="right-section-title">📁 File Activity</div>
+      <div id="file-activity-list">
+        <div style="padding:4px 6px;color:#7D8590;font-size:11.5px">
+          Waiting for activity…
+        </div>
+      </div>
+
+      <!-- TELEMETRY -->
+      <div class="right-section-title">📊 Telemetry</div>
+      <div id="telemetry-grid">
+        <div class="telemetry-card">
+          <div class="tele-label">Tokens</div>
+          <div class="tele-value purple" id="tele-tokens">0</div>
+        </div>
+        <div class="telemetry-card">
+          <div class="tele-label">Files</div>
+          <div class="tele-value blue" id="tele-files">0</div>
+        </div>
+        <div class="telemetry-card">
+          <div class="tele-label">Lines</div>
+          <div class="tele-value green" id="tele-loc">0</div>
+        </div>
+        <div class="telemetry-card">
+          <div class="tele-label">Tests</div>
+          <div class="tele-value amber" id="tele-tests">0</div>
+        </div>
+      </div>
+
+      <!-- small padding at bottom -->
+      <div style="height:12px"></div>
+    </aside>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       BOTTOM PANEL
+       ══════════════════════════════════════════════════════ -->
+  <div id="bottom-panel">
+    <!-- Tabs -->
+    <div id="bottom-tabs">
+      <button class="bottom-tab active" data-pane="terminal-pane">Terminal</button>
+      <button class="bottom-tab"        data-pane="logs-pane">Logs</button>
+      <button class="bottom-tab"        data-pane="chat-pane">Chat</button>
+      <button class="bottom-tab"        data-pane="tests-pane">Tests</button>
+      <button class="bottom-tab"        data-pane="git-pane">Git</button>
+      <button class="bottom-tab"        data-pane="output-pane">Output</button>
+    </div>
+
+    <!-- Pane Content -->
+    <div id="bottom-content">
+
+      <!-- Terminal -->
+      <div id="terminal-pane" class="bottom-pane active">
+        <div class="terminal-line cmd">
+          <span class="terminal-prompt">agentverse@ide</span>:~$
+        </div>
+      </div>
+
+      <!-- Logs -->
+      <div id="logs-pane" class="bottom-pane"></div>
+
+      <!-- Chat -->
+      <div id="chat-pane" class="bottom-pane" style="display:flex;flex-direction:column;">
+        <div id="chat-messages" style="flex:1;overflow-y:auto;padding:4px 0;">
+          <div class="chat-msg system">
+            <div class="chat-msg-body">
+              Describe what you want to build. The AgentVerse pipeline will plan, architect, code, test, and commit it automatically.
+            </div>
+          </div>
+        </div>
+        <div id="chat-input-area">
+          <input type="text"
+                 id="chat-input"
+                 placeholder="Build a REST API for a todo app…"
+                 autocomplete="off">
+          <button id="chat-submit" disabled>▶ Run</button>
+        </div>
+      </div>
+
+      <!-- Tests -->
+      <div id="tests-pane" class="bottom-pane"></div>
+
+      <!-- Git -->
+      <div id="git-pane" class="bottom-pane"></div>
+
+      <!-- Output -->
+      <div id="output-pane" class="bottom-pane"></div>
+
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- Toast Container (outside app grid) -->
+<div id="toast-container"></div>
+
+<!-- Monaco Editor Loader -->
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+
+<!-- AgentVerse App -->
+<script src="/static/app.js"></script>
+</body>
+</html>

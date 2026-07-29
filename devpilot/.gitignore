@@ -3,6 +3,8 @@ __pycache__/
 .pytest_cache/
 workspace/*
 !workspace/.gitkeep
+!workspace/__init__.py
+!workspace/manager.py
 logs/*
 !logs/.gitkeep
 .venv/

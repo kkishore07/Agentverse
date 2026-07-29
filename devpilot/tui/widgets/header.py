@@ -1,16 +1,16 @@
 """
 tui/widgets/header.py
 ======================
-DevPilotHeader — replaces Textual's generic Header widget.
+AgentVerseHeader — replaces Textual's generic Header widget.
 
 Shows (left to right):
-  ● Logo pill        [  DevPilot  ]
+  ● Logo pill        [  AgentVerse  ]
   ● Workspace name   workspace/project
   ● Git branch       ⎇ main
   ● Model name       ◈ qwen2.5-coder
-  ● Connection dot   🟢 Connected  /  🔴 Offline
+  ● Connection dot   ● Connected  /  ● Offline
   ● Mode badge       CHAT / TASK
-  ● Theme name       🎨 Tokyo Night
+  ● Theme name       🎨 AgentVerse
 
 All fields are reactive — assigning to them triggers an instant redraw.
 No rebuild, no full-screen invalidation.
@@ -48,6 +48,14 @@ class DevPilotHeader(Widget):
         height: 1;
     }
 
+    DevPilotHeader .header-brand {
+        color: $foreground;
+        text-style: bold;
+        padding: 0 1;
+        margin-right: 1;
+        height: 1;
+    }
+
     DevPilotHeader .header-sep {
         color: $panel;
         margin: 0 1;
@@ -61,12 +69,12 @@ class DevPilotHeader(Widget):
     }
 
     DevPilotHeader .header-git {
-        color: $success;
+        color: $accent;
         margin-right: 1;
     }
 
     DevPilotHeader .header-model {
-        color: $accent;
+        color: $secondary;
         margin-right: 1;
     }
 
@@ -95,7 +103,7 @@ class DevPilotHeader(Widget):
     }
 
     DevPilotHeader .header-theme {
-        color: $foreground 50%;
+        color: $foreground 40%;
         margin-left: 1;
     }
 
@@ -117,13 +125,13 @@ class DevPilotHeader(Widget):
 
     def compose(self) -> ComposeResult:
         with Horizontal():
-            yield Static(" DevPilot ", classes="header-logo", id="hdr-logo")
+            yield Static(" ◈ AgentVerse ", classes="header-logo", id="hdr-logo")
             yield Static("│", classes="header-sep")
             yield Static("", classes="header-workspace", id="hdr-workspace")
             yield Static("", classes="header-git",       id="hdr-git")
             yield Static("", classes="header-spacer")
             yield Static("", classes="header-model",     id="hdr-model")
-            yield Static("", classes="header-sep")
+            yield Static("│", classes="header-sep")
             yield Static("", id="hdr-conn")
             yield Static("", id="hdr-mode",    classes="header-mode-chat")
             yield Static("", classes="header-theme",     id="hdr-theme")

@@ -43,24 +43,26 @@ class FailureReportCard(Vertical):
     FailureReportCard {
         height: auto;
         margin: 1 0;
-        padding: 0 1;
-        background: transparent;
-        border-left: thick #EF4444;
+        padding: 1 2;
+        background: #1A0A0A;
+        border-left: thick #F85149;
+        border: solid #30363D;
     }
 
     .frc-header {
-        color: #EF4444;
+        color: #F85149;
         text-style: bold;
         margin-bottom: 1;
+        height: 2;
     }
 
     .frc-detail {
-        color: #ECECEC;
+        color: #E6EDF3;
         margin-bottom: 1;
     }
 
     .frc-suggestion {
-        color: #10B981;
+        color: #56D364;
         text-style: bold;
         margin-top: 1;
     }
@@ -72,28 +74,28 @@ class FailureReportCard(Vertical):
 
     def compose(self) -> ComposeResult:
         r = self.report
-        yield Static(f"❌ {r.agent_name.capitalize()} Agent Failed", classes="frc-header")
-        yield Static(f"[bold #A5A5A5]Task:[/] [bold #ECECEC]{r.task}[/]", classes="frc-detail")
-        
+        yield Static(f"✗  {r.agent_name.capitalize()} Agent Failed", classes="frc-header")
+        yield Static(f"[#7D8590]Task:[/] [bold #E6EDF3]{r.task}[/]", classes="frc-detail")
+
         if r.command_executed:
-            yield Static(f"[bold #A5A5A5]Command:[/] [bold #3B82F6]{r.command_executed}[/]  (Exit Code: [bold #EF4444]{r.exit_code if r.exit_code is not None else 'N/A'}[/])", classes="frc-detail")
+            yield Static(f"[#7D8590]Command:[/] [bold #2F81F7]{r.command_executed}[/]  (Exit: [bold #F85149]{r.exit_code if r.exit_code is not None else 'N/A'}[/])", classes="frc-detail")
 
         if r.affected_file:
             loc_str = f"{r.affected_file}" + (f":{r.affected_line}" if r.affected_line else "")
-            yield Static(f"[bold #A5A5A5]Location:[/] [bold #F59E0B]{loc_str}[/]", classes="frc-detail")
+            yield Static(f"[#7D8590]Location:[/] [bold #E3B341]{loc_str}[/]", classes="frc-detail")
 
-        yield Static(f"[bold #EF4444][{r.exception_type}][/] {r.message}", classes="frc-detail")
+        yield Static(f"[bold #F85149][{r.exception_type}][/] {r.message}", classes="frc-detail")
 
         if r.stdout or r.stderr:
             out_content = (r.stdout + ("\n" + r.stderr if r.stderr else "")).strip()
-            with Collapsible(title="▼ View Output & Traceback", collapsed=False):
+            with Collapsible(title="▾ View Output & Traceback", collapsed=False):
                 yield Markdown(f"```text\n{out_content}\n```")
 
         if r.suggestion:
-            yield Static(f"💡 [bold #10B981]Suggested Fix:[/] {r.suggestion}", classes="frc-suggestion")
+            yield Static(f"💡 [bold #56D364]Suggested Fix:[/] {r.suggestion}", classes="frc-suggestion")
 
         if r.log_path:
-            yield Static(f"[dim #A5A5A5]Log File: {r.log_path}[/]", classes="frc-detail")
+            yield Static(f"[dim #7D8590]Log: {r.log_path}[/]", classes="frc-detail")
 
 
 # ---------------------------------------------------------------------------
@@ -105,18 +107,20 @@ class ExecutionReportCard(Vertical):
     ExecutionReportCard {
         height: auto;
         margin: 1 0;
-        padding: 0 1;
-        background: transparent;
-        border-left: thick #10B981;
+        padding: 1 2;
+        background: #0A1A0F;
+        border-left: thick #56D364;
+        border: solid #30363D;
     }
     .erc-title {
-        color: #10B981;
+        color: #56D364;
         text-style: bold;
         margin-bottom: 1;
+        height: 2;
     }
     .erc-row { layout: horizontal; height: 1; }
-    .erc-key { color: #94A3B8; width: 20; }
-    .erc-val { color: #F8FAFC; width: 1fr; }
+    .erc-key { color: #7D8590; width: 20; }
+    .erc-val { color: #E6EDF3; text-style: bold; width: 1fr; }
     """
 
     def __init__(self, data: dict) -> None:
@@ -124,22 +128,22 @@ class ExecutionReportCard(Vertical):
         super().__init__()
 
     def compose(self) -> ComposeResult:
-        yield Static("✅ PIPELINE EXECUTION REPORT", classes="erc-title")
-        
-        # Display Stats
+        yield Static("✓  PIPELINE EXECUTION COMPLETE", classes="erc-title")
+
         stats = [
-            ("Agents Invoked", str(self.data.get("agents_invoked", 0))),
-            ("Files Written", str(len(self.data.get("written_files", [])))),
+            ("Agents Invoked",  str(self.data.get("agents_invoked", 0))),
+            ("Files Written",   str(len(self.data.get("written_files", [])))),
             ("Tokens Consumed", f"{self.data.get('tokens', 0):,}"),
-            ("Test Coverage", f"{self.data.get('test_coverage', 0)}%"),
-            ("Duration", f"{self.data.get('duration', 0.0):.1f}s")
+            ("Test Coverage",   f"{self.data.get('test_coverage', 0)}%"),
+            ("Duration",        f"{self.data.get('duration', 0.0):.1f}s"),
         ]
-        
+
         for k, v in stats:
             with Horizontal(classes="erc-row"):
                 yield Static(f"{k}:", classes="erc-key")
                 yield Static(v, classes="erc-val")
 
+# ---------------------------------------------------------------------------
 # ExpandableFileCard (Live File & Diff Preview)
 # ---------------------------------------------------------------------------
 
@@ -153,20 +157,27 @@ class ExpandableFileCard(Vertical):
         height: auto;
         margin: 1 0;
         padding: 0;
-        background: transparent;
-        border-left: thick #3B82F6;
+        background: $surface;
+        border-left: thick $primary;
+        border: solid $panel;
     }
 
     .fc-header {
-        color: #ECECEC;
+        color: $foreground;
         text-style: bold;
-        padding: 1 1 0 1;
+        padding: 0 1;
         height: 2;
+        background: $panel;
+        align: left middle;
     }
 
-    .fc-status-create { color: #10B981; }
-    .fc-status-edit   { color: #F59E0B; }
-    .fc-status-read   { color: #3B82F6; }
+    .fc-header-created  { border-left: thick $success; }
+    .fc-header-modified { border-left: thick $warning; }
+    .fc-header-read     { border-left: thick $primary; }
+
+    .fc-status-create { color: $success; }
+    .fc-status-edit   { color: $warning; }
+    .fc-status-read   { color: $primary; }
 
     ExpandableFileCard Collapsible {
         background: transparent;
@@ -175,9 +186,9 @@ class ExpandableFileCard(Vertical):
     }
 
     .diff-viewer {
-        background: #000000;
+        background: $background;
         padding: 1;
-        border: solid #2C2C2C;
+        border: solid $panel;
     }
     """
 
@@ -193,32 +204,35 @@ class ExpandableFileCard(Vertical):
         text = Text()
         for line in lines:
             if line.startswith("+"):
-                text.append(line + "\n", style="bold #10B981 on #022C22")
+                text.append(line + "\n", style="bold #56D364 on #0A1A0F")
             elif line.startswith("-"):
-                text.append(line + "\n", style="bold #EF4444 on #450A0A")
+                text.append(line + "\n", style="bold #F85149 on #1A0A0A")
             elif line.startswith("@@"):
-                text.append(line + "\n", style="bold #38BDF8")
+                text.append(line + "\n", style="bold #58A6FF")
             else:
-                text.append(line + "\n", style="#A5A5A5")
+                text.append(line + "\n", style="#7D8590")
         return text
 
     def compose(self) -> ComposeResult:
         ext = self.path.split(".")[-1] if "." in self.path else "text"
         status_key = "create" if self.op.lower() in ("create", "created") else ("edit" if self.op.lower() in ("edit", "modified") else "read")
-        
+
+        op_icon = "+" if status_key == "create" else ("✏" if status_key == "edit" else "👁")
+        op_color = "#56D364" if status_key == "create" else ("#E3B341" if status_key == "edit" else "#2F81F7")
+
         yield Static(
-            f"📄 {self.path}  [{self.op.capitalize()}]  • Language: {ext.upper()}",
+            f"[{op_color}]{op_icon}[/]  {self.path}  [dim #7D8590]· {ext.upper()}[/]",
             classes=f"fc-header fc-status-{status_key}",
         )
-        
-        title = "▼ Code Diff" if self.diff else "▼ Code Implementation"
+
+        title = "▾ Code Diff" if self.diff else "▾ Code Preview"
         with Collapsible(title=title, collapsed=False):
             if self.diff:
                 yield Static(self._render_diff(), classes="diff-viewer")
             elif self.content:
                 yield Markdown(f"```{ext}\n{self.content}\n```")
             else:
-                yield Static(f"[dim #A5A5A5]File {self.op.lower()} at {self.path}[/]")
+                yield Static(f"[dim #7D8590]File {self.op.lower()} at {self.path}[/]")
 
 # ---------------------------------------------------------------------------
 # ChatMessage (User, System, Error)
@@ -235,29 +249,33 @@ class ChatMessage(Vertical):
     }
 
     ChatMessage.-user {
-        background: #2B2B2B; 
-        color: #FFFFFF;
+        background: $boost;
+        color: $foreground;
         width: 1fr;
-        margin: 0;
-        padding: 0 2;
+        margin: 0 0 1 0;
+        padding: 1 2;
+        border-left: thick $primary;
     }
 
     ChatMessage.-system {
         background: transparent;
-        color: #A5A5A5;
+        color: $foreground 50%;
         padding: 0;
     }
 
     ChatMessage.-error {
-        background: transparent;
-        border-left: thick #EF4444;
-        color: #EF4444;
-        padding: 0 1;
+        background: #1A0A0A;
+        border-left: thick $error;
+        color: $error;
+        padding: 1 2;
         margin-bottom: 1;
     }
 
     .msg-role-user {
-        display: none;
+        color: $primary;
+        text-style: bold;
+        height: 1;
+        margin-bottom: 1;
     }
 
     .msg-role-sys {
@@ -278,7 +296,7 @@ class ChatMessage(Vertical):
 
     def compose(self) -> ComposeResult:
         if self._role == "user":
-            yield Static("👤 You", classes="msg-role-user")
+            yield Static("👤  You", classes="msg-role-user")
         else:
             yield Static("⚙ System", classes="msg-role-sys")
 
@@ -296,25 +314,25 @@ class AgentProgressCard(Static):
 
     DEFAULT_CSS = """
     AgentProgressCard {
-        color: #A5A5A5;
+        color: $foreground 50%;
         height: 1;
         margin-bottom: 1;
     }
     """
 
     def __init__(self) -> None:
-        super().__init__("⠋ Thinking...")
+        super().__init__("⠋  Thinking...")
         self.hidden = False
-        
+
     def update_data(self, data: dict) -> None:
         if "llm_token" in data and not self.hidden:
             self.display = False
             self.hidden = True
             return
-            
+
         step = data.get("step") or data.get("operation")
         if step and not self.hidden:
-            self.update(f"⠋ {step}...")
+            self.update(f"⠋  {step}...")
 
 
 # ---------------------------------------------------------------------------
@@ -327,44 +345,53 @@ class StreamingMessage(Vertical):
     DEFAULT_CSS = """
     StreamingMessage {
         height: auto;
-        margin: 0 0 1 0;
+        margin: 0 0 2 0;
         padding: 0;
         background: transparent;
         border: none;
     }
 
     .asst-header-row {
-        height: auto;
+        height: 2;
         margin-bottom: 1;
+        background: $panel;
+        align: left middle;
+        padding: 0 1;
     }
 
     #timeline-container {
-        display: none; /* Hide heavy pipeline timeline in chat */
+        display: none;
     }
 
     .msg-role-asst {
-        color: #ECECEC;
+        color: $primary;
         text-style: bold;
         width: 1fr;
     }
 
     .asst-copy-btn {
         height: 1;
-        min-width: 18;
+        min-width: 16;
         border: none;
         background: transparent;
-        color: #A5A5A5;
+        color: $foreground 40%;
         padding: 0 1;
     }
 
     .asst-copy-btn:hover {
-        background: #2C2C2C;
-        color: #FFFFFF;
+        background: $boost;
+        color: $foreground;
     }
 
     #thinking-container {
         height: auto;
         background: transparent;
+        padding: 0 1;
+    }
+
+    .step-line {
+        color: $foreground 50%;
+        height: 1;
     }
 
     #file-ops-container {
@@ -376,18 +403,40 @@ class StreamingMessage(Vertical):
     StreamingMessage Markdown {
         background: transparent;
         margin: 0;
-        padding: 0;
+        padding: 0 1;
     }
 
     StreamingMessage MarkdownFence {
-        background: #111111;
-        border: solid #2C2C2C;
+        background: $panel;
+        border: solid $boost;
         margin: 1 0;
     }
 
     .streaming-cursor {
-        color: #ECECEC;
+        color: $primary;
         height: 1;
+        padding: 0 1;
+    }
+
+    .timeline-stage {
+        color: $foreground 40%;
+        padding: 0 1;
+        height: 1;
+        border: solid $panel;
+        margin-right: 1;
+    }
+
+    .active-stage {
+        color: $primary;
+        text-style: bold;
+        border: solid $primary;
+    }
+
+    .timeline-arrow {
+        color: $foreground 30%;
+        height: 1;
+        width: 3;
+        align: center middle;
     }
     """
 
@@ -400,8 +449,8 @@ class StreamingMessage(Vertical):
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="asst-header-row"):
-            yield Static("🤖 DevPilot", classes="msg-role-asst")
-            yield Button("📋 Copy Response", id="btn-copy-asst", classes="asst-copy-btn")
+            yield Static("◈  AgentVerse", classes="msg-role-asst")
+            yield Button("📋 Copy", id="btn-copy-asst", classes="asst-copy-btn")
         yield Horizontal(id="timeline-container", classes="timeline-hidden")
         yield Vertical(id="thinking-container")
         yield Vertical(id="file-ops-container")
@@ -431,7 +480,7 @@ class StreamingMessage(Vertical):
             full_text = self.get_full_response_text()
             if full_text:
                 self.app.copy_to_clipboard(full_text)
-                self.app.notify("Copied entire response & code to clipboard!", title="Clipboard", severity="information")
+                self.app.notify("Copied response & code to clipboard!", title="Clipboard", severity="information")
 
     def add_step(self, step_text: str) -> None:
         """Add an inline step under Thinking."""
@@ -472,12 +521,12 @@ class StreamingMessage(Vertical):
         try:
             container = self.query_one("#timeline-container", Horizontal)
             container.remove_class("timeline-hidden")
-            container.query("*").remove() # clear existing
+            container.query("*").remove()
             for idx, stage in enumerate(stages):
                 label = Static(f"{stage.capitalize()}", id=f"stage-{stage}", classes="timeline-stage")
                 container.mount(label)
                 if idx < len(stages) - 1:
-                    container.mount(Static(" ➔ ", classes="timeline-arrow"))
+                    container.mount(Static("→", classes="timeline-arrow"))
         except Exception:
             pass
 
@@ -496,17 +545,16 @@ class StreamingMessage(Vertical):
     def update_agent_progress(self, data: dict) -> None:
         """Dynamically update agent progress fields and route llm tokens to text buffer."""
         agent_name = data.get("agent_name", "agent")
-        
+
         # Handle streaming LLM tokens
         if "llm_token" in data:
             self.append(data["llm_token"])
-            
+
         # Mount or update the AgentProgressCard
         try:
             container = self.query_one("#thinking-container", Vertical)
             card_id = f"apc-{agent_name}"
-            
-            # Check if this agent's card exists, if not create it
+
             matches = container.query(f"#{card_id}")
             if matches:
                 card = matches.first()
@@ -514,7 +562,7 @@ class StreamingMessage(Vertical):
                 card = AgentProgressCard()
                 card.id = card_id
                 container.mount(card)
-                
+
             card.update_data(data)
         except Exception:
             pass
@@ -549,8 +597,8 @@ class ChatLog(VerticalScroll):
     DEFAULT_CSS = """
     ChatLog {
         height: 1fr;
-        padding: 1 4;
-        background: #090909;
+        padding: 1 3;
+        background: $background;
         border: none;
     }
     """
@@ -559,7 +607,7 @@ class ChatLog(VerticalScroll):
         super().__init__(**kwargs)
         self._active_stream: StreamingMessage | None = None
 
-    async def add_message(self, role: str, content: str) -> ChatMessage | StreamingMessage:
+    async def add_message(self, role: str, content: str) -> "ChatMessage | StreamingMessage":
         if role == "assistant":
             stream = StreamingMessage()
             await self.mount(stream)

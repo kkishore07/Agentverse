@@ -1,7 +1,7 @@
 """
 tui/screens/splash_screen.py
 ===========================
-Startup Splash Screen for DevPilot AI Engineering Workspace.
+Startup Splash Screen for AgentVerse — Autonomous AI Software Development Team.
 """
 
 from __future__ import annotations
@@ -12,13 +12,13 @@ from textual.containers import Container, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
-SPLASH_ASCII = """
-██████╗ ███████╗██╗   ██╗██████╗ ██╗██╗      ██████╗ ████████╗
-██╔══██╗██╔════╝██║   ██║██╔══██╗██║██║     ██╔═══██╗╚══██╔══╝
-██║  ██║█████╗  ██║   ██║██████╔╝██║██║     ██║   ██║   ██║   
-██║  ██║██╔══╝  ╚██╗ ██╔╝██╔═══╝ ██║██║     ██║   ██║   ██║   
-██████╔╝███████╗ ╚████╔╝ ██║     ██║███████╗╚██████╔╝   ██║   
-╚═════╝ ╚══════╝  ╚═══╝  ╚═╝     ╚═╝╚══════╝ ╚═════╝    ╚═╝   
+SPLASH_ASCII = """\
+    _                    _ __   __
+   / \\   __ _  ___ _ __ | |\\ \\ / /__ _ __ ___  ___
+  / _ \\ / _` |/ _ \\ '_ \\| __\\ V / _ \\ '__/ __|/ _ \\
+ / ___ \\ (_| |  __/ | | | |_ | |  __/ |  \\__ \\  __/
+/_/   \\_\\__, |\\___|_| |_|\\__||_|\\___|_|  |___/\\___|
+        |___/
 """
 
 class SplashScreen(ModalScreen[None]):
@@ -27,34 +27,48 @@ class SplashScreen(ModalScreen[None]):
     DEFAULT_CSS = """
     SplashScreen {
         align: center middle;
-        background: #090909;
+        background: #0D1117;
     }
 
     #splash-container {
-        width: 70;
+        width: 66;
         height: auto;
-        padding: 2;
-        border: heavy #3B82F6;
-        background: #111111;
+        padding: 2 3;
+        border: solid #30363D;
+        border-top: heavy #2F81F7;
+        background: #161B22;
         align: center middle;
     }
 
     .splash-logo {
-        color: #3B82F6;
+        color: #2F81F7;
         text-style: bold;
         text-align: center;
+    }
+
+    .splash-tagline {
+        color: #56D364;
+        text-align: center;
+        margin-top: 1;
+        text-style: bold;
     }
 
     .splash-subtitle {
-        color: #A5A5A5;
+        color: #7D8590;
         text-align: center;
-        margin-bottom: 1;
-        text-style: bold;
+        margin-bottom: 2;
     }
 
     .splash-status {
-        color: #10B981;
+        color: #56D364;
         text-align: center;
+        height: 1;
+    }
+
+    .splash-agents {
+        color: #7D8590;
+        text-align: center;
+        margin-top: 1;
         height: 1;
     }
     """
@@ -62,28 +76,34 @@ class SplashScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with Container(id="splash-container"):
             yield Static(SPLASH_ASCII, classes="splash-logo")
-            yield Static("AI Engineering Workspace v2.0", classes="splash-subtitle")
+            yield Static("Autonomous AI Software Development Team", classes="splash-tagline")
+            yield Static("Planner · Architect · Coder · Tester · Reviewer · Docs · GitHub", classes="splash-subtitle")
             yield Static("Initializing workspace...", id="splash-status", classes="splash-status")
+            yield Static("", id="splash-agents", classes="splash-agents")
 
     def on_mount(self) -> None:
         self.run_worker(self._initialize())
 
     async def _initialize(self) -> None:
         status = self.query_one("#splash-status", Static)
+        agents_label = self.query_one("#splash-agents", Static)
+
         steps = [
-            "Loading UI...",
-            "Loading Agents...",
-            "Loading Models...",
-            "Loading Skills...",
-            "Loading Workspace...",
-            "Loading Plugins...",
-            "Loading Themes...",
-            "Ready!",
+            ("Loading runtime...",      ""),
+            ("Connecting to LLM...",    ""),
+            ("Booting Planner...",      "🧭 Planner"),
+            ("Booting Architect...",    "🏗 Architect"),
+            ("Booting Coder...",        "💻 Coder"),
+            ("Booting Tester...",       "🧪 Tester"),
+            ("Loading workspace...",    ""),
+            ("All systems ready!",      ""),
         ]
-        for step in steps:
-            status.update(f"[bold #10B981]{step}[/]")
-            await asyncio.sleep(0.12)
-        await asyncio.sleep(0.3)
+        for step, agent in steps:
+            status.update(f"[bold #56D364]{step}[/]")
+            if agent:
+                agents_label.update(f"[dim #7D8590]{agent} online[/]")
+            await asyncio.sleep(0.10)
+        await asyncio.sleep(0.25)
         self.dismiss()
 
     def on_key(self) -> None:

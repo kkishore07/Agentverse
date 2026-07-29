@@ -24,7 +24,7 @@ class _Pill(Static):
     _Pill {
         height: 1;
         padding: 0 1;
-        color: $foreground 50%;
+        color: $foreground 40%;
     }
     """
 
@@ -70,44 +70,44 @@ class StatusBar(Widget):
     }
 
     StatusBar #sb-status {
-        color: $foreground;
+        color: $foreground 80%;
     }
 
     StatusBar #sb-agent {
-        color: $secondary;
+        color: $warning;
         text-style: bold;
     }
 
     StatusBar #sb-workspace {
-        color: $foreground 50%;
+        color: $foreground 40%;
     }
 
     StatusBar #sb-model {
-        color: $accent;
+        color: $secondary;
     }
 
     StatusBar #sb-tokens {
-        color: $foreground 50%;
+        color: $foreground 30%;
     }
 
     StatusBar #sb-theme {
-        color: $foreground 50%;
+        color: $foreground 30%;
     }
 
     StatusBar #sb-hints {
-        color: $panel;
+        color: $foreground 20%;
         width: 1fr;
         text-align: right;
     }
     """
 
-    mode: reactive[str]          = reactive("CHAT")
-    active_agent: reactive[str]  = reactive("")
-    model_name: reactive[str]    = reactive("")
+    mode: reactive[str]           = reactive("CHAT")
+    active_agent: reactive[str]   = reactive("")
+    model_name: reactive[str]     = reactive("")
     workspace_name: reactive[str] = reactive("")
     token_estimate: reactive[int] = reactive(0)
-    status_text: reactive[str]   = reactive("Ready")
-    theme_label: reactive[str]   = reactive("")
+    status_text: reactive[str]    = reactive("Ready")
+    theme_label: reactive[str]    = reactive("")
 
     def compose(self) -> ComposeResult:
         with Horizontal():

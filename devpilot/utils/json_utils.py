@@ -48,12 +48,15 @@ def extract_json(raw_text: str) -> Any:
         candidates.append(balanced)
 
     for candidate in candidates:
-        try:
-            return json.loads(candidate)
-        except json.JSONDecodeError:
-            cleaned = _remove_trailing_commas(candidate)
+        variations = [
+            candidate,
+            _remove_trailing_commas(candidate),
+            _fix_invalid_escapes(candidate),
+            _fix_invalid_escapes(_remove_trailing_commas(candidate)),
+        ]
+        for item in variations:
             try:
-                return json.loads(cleaned)
+                return json.loads(item)
             except json.JSONDecodeError:
                 continue
 
@@ -100,3 +103,12 @@ def _find_balanced_json(text: str) -> str | None:
 
 def _remove_trailing_commas(text: str) -> str:
     return re.sub(r",\s*([}\]])", r"\1", text)
+
+
+def _fix_invalid_escapes(text: str) -> str:
+    """Fix invalid JSON escape sequences like \\' produced by smaller LLMs."""
+    # Replace invalid \' with '
+    text = re.sub(r"\\'", "'", text)
+    # Replace any backslash not followed by valid JSON escape chars (" \ / b f n r t u)
+    text = re.sub(r'\\([^"\\/bfnrtu])', r'\1', text)
+    return text

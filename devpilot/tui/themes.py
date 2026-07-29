@@ -1,13 +1,12 @@
 """
 tui/themes.py
 =============
-DevPilot ships eight curated dark themes. Five use Textual's built-in
-design-token implementations; three (Midnight, Dracula, Cyberpunk) are
-bespoke `textual.theme.Theme` registrations that own their full palette.
+AgentVerse ships nine curated dark themes. Custom themes (AgentVerse, Midnight,
+Dracula, Cyberpunk) are bespoke `textual.theme.Theme` registrations that own
+their full palette.
 
-All themes are registered at import time via `register_theme()`.  The rest
-of the application only ever refers to the `THEMES` dict — it doesn't know
-or care whether a theme is built-in or custom.
+All themes are registered at import time via `register_theme()`. The rest
+of the application only ever refers to the `THEMES` dict.
 """
 
 from __future__ import annotations
@@ -18,6 +17,29 @@ from textual.theme import Theme
 # ---------------------------------------------------------------------------
 # Custom theme definitions
 # ---------------------------------------------------------------------------
+
+_AGENTVERSE = Theme(
+    name="agentverse",
+    dark=True,
+    primary="#2F81F7",          # GitHub blue
+    secondary="#8B5CF6",        # violet
+    accent="#56D364",           # GitHub green
+    background="#0D1117",       # GitHub dark canvas
+    surface="#161B22",          # GitHub dark surface
+    panel="#21262D",            # GitHub dark panel
+    boost="#30363D",            # GitHub dark muted
+    warning="#E3B341",          # amber
+    error="#F85149",            # red
+    success="#56D364",          # green
+    foreground="#E6EDF3",       # primary text
+    variables={
+        "text": "#7D8590",              # muted text
+        "border": "#30363D",
+        "input-background": "#161B22",
+        "scrollbar-color": "#30363D",
+        "scrollbar-color-hover": "#2F81F7",
+    },
+)
 
 _DEVPILOT_DARK = Theme(
     name="devpilot-dark",
@@ -119,36 +141,39 @@ _CYBERPUNK = Theme(
 # Display name → Textual theme id
 # Order here drives the Theme picker / command palette.
 THEMES: dict[str, str] = {
-    "DevPilot Dark":   "devpilot-dark",
-    "Tokyo Night":      "tokyo-night",
-    "Midnight":         "devpilot-midnight",
-    "Catppuccin Mocha": "catppuccin-mocha",
-    "Nord":             "nord",
-    "Gruvbox":          "gruvbox",
-    "One Dark":         "atom-one-dark",
-    "Dracula":          "devpilot-dracula",
-    "Cyberpunk":        "devpilot-cyberpunk",
+    "AgentVerse":       "agentverse",
+    "DevPilot Dark":    "devpilot-dark",
+    "Tokyo Night":       "tokyo-night",
+    "Midnight":          "devpilot-midnight",
+    "Catppuccin Mocha":  "catppuccin-mocha",
+    "Nord":              "nord",
+    "Gruvbox":           "gruvbox",
+    "One Dark":          "atom-one-dark",
+    "Dracula":           "devpilot-dracula",
+    "Cyberpunk":         "devpilot-cyberpunk",
 }
 
-DEFAULT_THEME = "DevPilot Dark"
+DEFAULT_THEME = "AgentVerse"
 
 # Accent colour shown as a swatch in the theme picker (hex, for the preview dot)
 THEME_ACCENTS: dict[str, str] = {
-    "DevPilot Dark":   "#3B82F6",
-    "Tokyo Night":      "#7AA2F7",
-    "Midnight":         "#5B8AF5",
-    "Catppuccin Mocha": "#CBA6F7",
-    "Nord":             "#88C0D0",
-    "Gruvbox":          "#FE8019",
-    "One Dark":         "#61AFEF",
-    "Dracula":          "#BD93F9",
-    "Cyberpunk":        "#00D4FF",
+    "AgentVerse":       "#2F81F7",
+    "DevPilot Dark":    "#3B82F6",
+    "Tokyo Night":       "#7AA2F7",
+    "Midnight":          "#5B8AF5",
+    "Catppuccin Mocha":  "#CBA6F7",
+    "Nord":              "#88C0D0",
+    "Gruvbox":           "#FE8019",
+    "One Dark":          "#61AFEF",
+    "Dracula":           "#BD93F9",
+    "Cyberpunk":         "#00D4FF",
 }
 
 
 def register_custom_themes(app) -> None:
     """Register bespoke themes with Textual's theme registry."""
     try:
+        app.register_theme(_AGENTVERSE)
         app.register_theme(_DEVPILOT_DARK)
         app.register_theme(_MIDNIGHT)
         app.register_theme(_DRACULA)
@@ -172,4 +197,4 @@ def display_name_for(theme_id_value: str) -> str:
 
 def accent_for(display_name: str) -> str:
     """Return the hex accent colour used in the theme preview swatch."""
-    return THEME_ACCENTS.get(display_name, "#7AA2F7")
+    return THEME_ACCENTS.get(display_name, "#2F81F7")

@@ -67,14 +67,18 @@ AGENT_ICONS = {
 }
 
 WELCOME = (
-    "**Welcome to DevPilot AI Engineering Workspace.**\n\n"
-    "I'm your AI pair programmer. Type a prompt or goal to get started.\n\n"
-    "**Keyboard Quickstart:**\n"
-    "- `Ctrl+P` — Open Command Palette\n"
-    "- `Ctrl+M` — Open Model Manager\n"
-    "- `Ctrl+S` — Open Skill & Plugin Manager\n"
-    "- `Ctrl+T` — Open Live Theme Switcher\n"
-    "- `Ctrl+H` — View Shortcuts Manual"
+    "## ◈ AgentVerse — Autonomous AI Software Development Team\n\n"
+    "I orchestrate a team of specialized AI agents to design, code, test, review,\n"
+    "document, and commit your software projects autonomously.\n\n"
+    "**Pipeline:** Planner → Architect → Coder → Validator → Tester → Reviewer → Docs → GitHub\n\n"
+    "**Get Started:** Describe what you want to build, e.g. *'Build a REST API for a todo app'*\n\n"
+    "**Keyboard Shortcuts:**\n"
+    "- `Ctrl+P` — Command Palette\n"
+    "- `Ctrl+A` — Agent Manager\n"
+    "- `Ctrl+M` — Model Manager\n"
+    "- `Ctrl+S` — Skills & Plugins\n"
+    "- `Ctrl+T` — Theme Switcher\n"
+    "- `Ctrl+H` — Help & Shortcuts"
 )
 
 
@@ -86,44 +90,48 @@ class ChatInput(Input):
 class DevPilotApp(App[None]):
     """Premium terminal IDE for DevPilot AI coding assistant."""
 
-    TITLE = "DevPilot"
-    SUB_TITLE = "AI Engineering Workspace"
+    TITLE = "AgentVerse"
+    SUB_TITLE = "Autonomous AI Software Development Team"
     COMMANDS = App.COMMANDS | {DevPilotCommands}
 
     DEFAULT_CSS = """
     Screen {
         layers: base overlay;
-        background: #090909;
+        background: #0D1117;
     }
 
     #body {
         height: 1fr;
-        background: #090909;
+        background: #0D1117;
     }
 
     #center-column {
         width: 1fr;
         height: 100%;
-        background: #090909;
+        background: #0D1117;
     }
 
     #input-area {
         height: auto;
         padding: 1 2;
-        background: #111111;
-        border-top: solid #2C2C2C;
+        background: #161B22;
+        border-top: solid #30363D;
     }
 
     #chat-input {
-        background: #171717;
-        border: solid #3B82F6;
+        background: #0D1117;
+        border: solid #30363D;
         padding: 0 1;
         height: 3;
-        color: #ECECEC;
+        color: #E6EDF3;
     }
 
     #chat-input:focus {
-        border: thick #3B82F6;
+        border: solid #2F81F7;
+    }
+
+    #chat-input:focus-within {
+        border: solid #2F81F7;
     }
     """
 
@@ -185,7 +193,7 @@ class DevPilotApp(App[None]):
                 yield ChatLog(id="chat-log")
                 with Container(id="input-area"):
                     yield ChatInput(
-                        placeholder="Ask DevPilot anything...",
+                        placeholder="Describe what you want to build…",
                         id="chat-input",
                     )
             yield WorkspacePanel(id="workspace-panel")
@@ -262,13 +270,18 @@ class DevPilotApp(App[None]):
         self.push_screen(FilePreviewScreen(event.file_path))
 
     async def _on_agent_progress(self, event) -> None:
-        if self._active_stream:
-            self._active_stream.update_agent_progress(event.data)
-            
+        try:
+            chat_log = self.query_one("#chat-log", ChatLog)
+            active = chat_log._active_stream
+            if active:
+                active.update_agent_progress(event.data)
+        except Exception:
+            pass
+
         name = event.data.get("agent_name", "")
         milestone = event.data.get("current_milestone", "")
         skill = event.data.get("current_skill", "")
-        
+
         try:
             panel = self.query_one("#workspace-panel", WorkspacePanel)
             if name or milestone:
@@ -280,13 +293,23 @@ class DevPilotApp(App[None]):
 
     async def _on_pipeline_started(self, event) -> None:
         stages = event.data.get("stages", [])
-        if self._active_stream:
-            self._active_stream.set_pipeline_timeline(stages)
+        try:
+            chat_log = self.query_one("#chat-log", ChatLog)
+            active = chat_log._active_stream
+            if active:
+                active.set_pipeline_timeline(stages)
+        except Exception:
+            pass
 
     async def _on_pipeline_stage_changed(self, event) -> None:
         stage = event.data.get("stage", "")
-        if self._active_stream:
-            self._active_stream.update_pipeline_stage(stage)
+        try:
+            chat_log = self.query_one("#chat-log", ChatLog)
+            active = chat_log._active_stream
+            if active:
+                active.update_pipeline_stage(stage)
+        except Exception:
+            pass
 
     async def _on_agent_started(self, event) -> None:
         name = event.data.get("agent_name", "Agent")
@@ -298,8 +321,9 @@ class DevPilotApp(App[None]):
         panel = self.query_one("#workspace-panel", WorkspacePanel)
         panel.update_agent(agent=name, task="Executing plan...")
         try:
-            pp = self.query_one("#wp-pipeline")
-            pp.set_agent_status(name, "running")
+            from tui.widgets.workspace_panel import AgentTeamPanel
+            team = self.query_one("#wp-agent-team", AgentTeamPanel)
+            team.set_agent_status(name, "running")
         except Exception:
             pass
 
@@ -316,8 +340,9 @@ class DevPilotApp(App[None]):
     async def _on_agent_finished(self, event) -> None:
         agent_name = event.data.get("agent_name", "Unknown")
         try:
-            pp = self.query_one("#wp-pipeline")
-            pp.set_agent_status(agent_name, "done")
+            from tui.widgets.workspace_panel import AgentTeamPanel
+            team = self.query_one("#wp-agent-team", AgentTeamPanel)
+            team.set_agent_status(agent_name, "done")
         except Exception:
             pass
 
