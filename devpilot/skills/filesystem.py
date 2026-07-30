@@ -21,6 +21,12 @@ class FilesystemSkill:
         self.root_dir = Path(root_dir).resolve()
         self._bus = bus
 
+    def _safe_relative(self, p: Path) -> str:
+        try:
+            return str(p.relative_to(self.root_dir))
+        except ValueError:
+            return str(p)
+
     def resolve_path(self, path: str | Path) -> Path:
         p = Path(path)
         if not p.is_absolute():
@@ -30,19 +36,19 @@ class FilesystemSkill:
     def read_file(self, path: str | Path) -> str:
         p = self.resolve_path(path)
         if self._bus:
-            self._bus.publish("FileReading", file_path=str(p.relative_to(self.root_dir)))
+            self._bus.publish("FileReading", file_path=self._safe_relative(p))
         return p.read_text(encoding="utf-8", errors="replace")
 
     def read_directory(self, path: str | Path = ".") -> List[str]:
         p = self.resolve_path(path)
-        return [str(f.relative_to(self.root_dir)) for f in p.iterdir()]
+        return [self._safe_relative(f) for f in p.iterdir()]
 
     def write_file(self, path: str | Path, content: str) -> Path:
         p = self.resolve_path(path)
         if self._bus:
             is_new = not p.exists()
             event_name = "FileCreating" if is_new else "FileEditing"
-            self._bus.publish(event_name, file_path=str(p.relative_to(self.root_dir)))
+            self._bus.publish(event_name, file_path=self._safe_relative(p))
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
         return p
@@ -72,7 +78,7 @@ class FilesystemSkill:
         src = self.resolve_path(old_path)
         dst = self.resolve_path(new_path)
         if self._bus:
-            self._bus.publish("FileEditing", file_path=str(dst.relative_to(self.root_dir)), old_path=str(src.relative_to(self.root_dir)))
+            self._bus.publish("FileEditing", file_path=self._safe_relative(dst), old_path=self._safe_relative(src))
         dst.parent.mkdir(parents=True, exist_ok=True)
         return src.rename(dst)
 
@@ -80,7 +86,7 @@ class FilesystemSkill:
         p = self.resolve_path(path)
         if p.is_file():
             if self._bus:
-                self._bus.publish("FileDeleting", file_path=str(p.relative_to(self.root_dir)))
+                self._bus.publish("FileDeleting", file_path=self._safe_relative(p))
             p.unlink()
             return True
         return False
@@ -113,4 +119,4 @@ class FilesystemSkill:
         return self.read_directory(path)
 
     def glob(self, pattern: str) -> List[str]:
-        return [str(p.relative_to(self.root_dir)) for p in self.root_dir.glob(pattern)]
+        return [self._safe_relative(p) for p in self.root_dir.glob(pattern)]

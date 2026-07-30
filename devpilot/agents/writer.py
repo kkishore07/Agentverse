@@ -42,7 +42,9 @@ class ProjectWriter:
         Returns:
             WriteResult with the project root and every path written.
         """
-        project_root = self._workspace_dir / project_slug
+        projects_dir = self._workspace_dir if self._workspace_dir.name == "projects" else (self._workspace_dir / "projects")
+        projects_dir.mkdir(parents=True, exist_ok=True)
+        project_root = projects_dir / project_slug
         project_root.mkdir(parents=True, exist_ok=True)
 
         written: list[Path] = []

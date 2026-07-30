@@ -48,7 +48,7 @@ class ReviewerAgent(Agent[ReviewerInput, ReviewerOutput]):
         
         full_text = ""
         try:
-            stream = self._llm.stream(user, system=system)
+            stream = self._llm.stream(user, system=system, json_mode=True)
             async for chunk in stream:
                 full_text += chunk
                 self.emit_progress(llm_token=chunk)
@@ -56,8 +56,7 @@ class ReviewerAgent(Agent[ReviewerInput, ReviewerOutput]):
             raise AgentError(f"Reviewer: LLM stream failed: {e}")
         
         try:
-            # We expect a JSON array of issues
-            from utils.json_utils import extract_json
+            from utils.json_utils import extract_json, JSONExtractionError
             raw_issues = extract_json(full_text)
             
             issues = []
@@ -65,13 +64,13 @@ class ReviewerAgent(Agent[ReviewerInput, ReviewerOutput]):
                 for iss in raw_issues:
                     if isinstance(iss, dict) and "file" in iss and "issue" in iss:
                         issues.append(ReviewIssue(
-                            file=iss.get("file", ""),
-                            severity=iss.get("severity", "medium"),
-                            issue=iss.get("issue", ""),
-                            suggestion=iss.get("suggestion", "")
+                            file=str(iss.get("file", "")),
+                            severity=str(iss.get("severity", "medium")),
+                            issue=str(iss.get("issue", "")),
+                            suggestion=str(iss.get("suggestion", ""))
                         ))
             
             self.emit_progress(current_milestone=f"Found {len(issues)} issues", current_skill="Static Analysis", progress="100%", issues_found=len(issues))
             return ReviewerOutput(issues=issues)
-        except json.JSONDecodeError as e:
-            raise AgentError(f"ReviewerAgent failed to parse JSON output: {e}\nRaw output: {response.text}")
+        except Exception as e:
+            raise AgentError(f"ReviewerAgent failed to parse JSON output: {e}\nRaw output: {full_text}")

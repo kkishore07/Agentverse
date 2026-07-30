@@ -201,12 +201,18 @@ class ModelsScreen(ModalScreen[str | None]):
             pass
 
         scroll = self.query_one("#m-scroll", VerticalScroll)
+        await scroll.remove_children()
         current = self._backend.settings.model_name
-        names = models or [current, "llama3", "phi3", "mistral", "codellama", "gemma"]
+        default_catalog = ["qwen2.5-coder", "llama3", "phi3", "mistral", "mixtral", "codellama", "gemma"]
+        raw_names = models if models else ([current] + [m for m in default_catalog if m != current])
 
-        for name in names:
+        seen_ids = set()
+        for name in raw_names:
             info = get_model_info(name)
-            is_current = name == current
+            if info.id in seen_ids:
+                continue
+            seen_ids.add(info.id)
+            is_current = (name == current) or (info.id == current)
             card = ModelCard(info, is_current=is_current)
             await scroll.mount(card)
 

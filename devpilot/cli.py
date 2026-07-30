@@ -32,12 +32,23 @@ from core.llm import LLMError, build_default_llm_client
 from core.orchestrator import Orchestrator
 from core.prompts import explain_prompt, improve_prompt
 
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 app = typer.Typer(
     name="devpilot",
     help="A local, multi-agent CLI software engineering assistant powered by Ollama.",
     add_completion=False,
 )
 console = Console()
+if hasattr(console.file, "reconfigure"):
+    try:
+        console.file.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 
 def _configure_logging(logs_dir: Path) -> None:
@@ -102,8 +113,26 @@ def create(
         )
         raise typer.Exit(code=1)
 
-    if not result.success:
-        raise typer.Exit(code=1)
+    if result.success:
+        console.print(
+            Panel(
+                f"[green][+] Project scaffolded successfully![/green]\n\n"
+                f"[bold]Root:[/bold] {result.project_root}\n"
+                f"[bold]Files Created:[/bold]\n" +
+                "\n".join([f"  • {f}" for f in result.written_files]),
+                title="DevPilot — Task Completed",
+                border_style="green",
+            )
+        )
+    else:
+        console.print(
+            Panel(
+                f"[yellow]Pipeline completed with warnings:[/yellow]\n\n" +
+                "\n".join([f"  • {e}" for e in result.errors if e]),
+                title="DevPilot — Task Status",
+                border_style="yellow",
+            )
+        )
 
 
 @app.command()
@@ -120,7 +149,8 @@ def explain(
 
     with console.status(f"[cyan]Explaining {resolved.name}...[/cyan]"):
         try:
-            response = llm.generate(user, system=system)
+            import asyncio
+            response = asyncio.run(llm.generate(user, system=system))
         except LLMError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(code=1)
@@ -143,7 +173,8 @@ def improve(
 
     with console.status(f"[cyan]Improving {resolved.name}...[/cyan]"):
         try:
-            response = llm.generate(user, system=system)
+            import asyncio
+            response = asyncio.run(llm.generate(user, system=system))
         except LLMError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(code=1)
