@@ -44,9 +44,10 @@ MOCK_METADATA = {
 
 
 def get_model_info(model_id: str) -> ModelInfo:
+    from dataclasses import replace
     for key, info in MOCK_METADATA.items():
         if key in model_id.lower():
-            return info
+            return replace(info, id=model_id)
     return ModelInfo(model_id, model_id.title(), "Local Ollama", "128K", "4GB+", "7B", "Q4_K_M", "****", "Local model running via Ollama service.")
 
 

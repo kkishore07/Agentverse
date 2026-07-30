@@ -412,6 +412,12 @@ class StreamingMessage(Vertical):
         margin: 1 0;
     }
 
+    .stream-live-text {
+        color: $foreground;
+        padding: 0 1;
+        height: auto;
+    }
+
     .streaming-cursor {
         color: $primary;
         height: 1;
@@ -440,12 +446,12 @@ class StreamingMessage(Vertical):
     }
     """
 
-    text: reactive[str] = reactive("", always_update=True)
-
     def __init__(self) -> None:
         super().__init__(classes="streaming-message -assistant")
         self._buffer = ""
         self._seen_file_ops: dict[str, ExpandableFileCard] = {}
+        self._render_pending = False
+        self._render_timer = None
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="asst-header-row"):
@@ -454,7 +460,9 @@ class StreamingMessage(Vertical):
         yield Horizontal(id="timeline-container", classes="timeline-hidden")
         yield Vertical(id="thinking-container")
         yield Vertical(id="file-ops-container")
-        yield Markdown("", id="stream-body")
+        # Static widget for live streaming — no async lock, no layout reflow
+        yield Static("", id="stream-live", classes="stream-live-text")
+        # Markdown placeholder shown only after finalize()
         yield Static("▍", classes="streaming-cursor", id="stream-cursor")
 
     def get_full_response_text(self) -> str:
@@ -568,22 +576,53 @@ class StreamingMessage(Vertical):
             pass
 
     def append(self, token: str) -> None:
+        """Accumulate a streaming token and schedule a debounced Static update."""
         self._buffer += token
-        self.text = self._buffer
+        self._schedule_render()
 
-    def watch_text(self, value: str) -> None:
+    def _schedule_render(self) -> None:
+        """Debounce: batch token renders at most every 80 ms."""
+        if self._render_pending:
+            return
+        self._render_pending = True
+        self._render_timer = self.set_timer(0.08, self._flush_render)
+
+    def _flush_render(self) -> None:
+        """Push buffered text to the lightweight Static widget — no async lock, no layout thrash."""
+        self._render_pending = False
+        self._render_timer = None
         try:
-            display_value = value or "▍"
-            if "{" in display_value and not display_value.strip().startswith("```"):
-                display_value = f"```json\n{display_value}\n```"
-            self.query_one("#stream-body", Markdown).update(display_value)
+            self.query_one("#stream-live", Static).update(self._buffer)
+            # Snap scroll instantly during streaming — animation fights layout reflows
+            parent = getattr(self, "parent", None)
+            if parent and hasattr(parent, "snap_scroll"):
+                self.app.call_after_refresh(parent.snap_scroll)
         except Exception:
             pass
 
     def finalize(self, full_text: str = "") -> None:
+        """Cancel pending render, swap Static→Markdown for proper formatted display."""
         if full_text:
             self._buffer = full_text
-            self.text = full_text
+        # Cancel pending debounce
+        if self._render_timer is not None:
+            try:
+                self._render_timer.stop()
+            except Exception:
+                pass
+            self._render_pending = False
+            self._render_timer = None
+        # Remove live Static, mount final Markdown
+        try:
+            self.query_one("#stream-live", Static).remove()
+        except Exception:
+            pass
+        if self._buffer:
+            display_value = self._buffer
+            if "{" in display_value and not display_value.strip().startswith("```"):
+                display_value = f"```json\n{display_value}\n```"
+            md = Markdown(display_value, id="stream-body")
+            self.mount(md, before=self.query_one("#stream-cursor", Static))
         try:
             self.query_one("#stream-cursor", Static).display = False
         except Exception:
@@ -615,19 +654,19 @@ class ChatLog(VerticalScroll):
             stream = StreamingMessage()
             await self.mount(stream)
             stream.finalize(content)
-            self.scroll_end(animate=False)
+            self.scroll_end(animate=True, duration=0.3)
             return stream
 
         widget = ChatMessage(role, content)
         await self.mount(widget)
-        self.scroll_end(animate=False)
+        self.scroll_end(animate=True, duration=0.3)
         return widget
 
     async def start_streaming(self) -> StreamingMessage:
         stream = StreamingMessage()
         self._active_stream = stream
         await self.mount(stream)
-        self.scroll_end(animate=False)
+        self.scroll_end(animate=True, duration=0.3)
         return stream
 
     def get_active_stream(self) -> StreamingMessage:
@@ -637,15 +676,25 @@ class ChatLog(VerticalScroll):
             self.mount(stream)
         return self._active_stream
 
+    def auto_scroll(self) -> None:
+        """Smooth animated scroll — only used for complete discrete messages."""
+        if self.max_scroll_y - self.scroll_y <= 6:
+            self.scroll_end(animate=True, duration=0.3)
+
+    def snap_scroll(self) -> None:
+        """Instant scroll during active streaming — animation fights layout reflows."""
+        if self.max_scroll_y - self.scroll_y <= 6:
+            self.scroll_end(animate=False)
+
     def add_step(self, step_text: str) -> None:
         stream = self.get_active_stream()
         stream.add_step(step_text)
-        self.scroll_end(animate=False)
+        self.app.call_after_refresh(self.auto_scroll)
 
     def add_file_op(self, op: str, path: str, content: str = "", diff: str = "") -> None:
         stream = self.get_active_stream()
         stream.add_file_op(op, path, content, diff)
-        self.scroll_end(animate=False)
+        self.app.call_after_refresh(self.auto_scroll)
 
     async def clear_all(self) -> None:
         self._active_stream = None
