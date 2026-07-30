@@ -551,12 +551,8 @@ class StreamingMessage(Vertical):
             pass
 
     def update_agent_progress(self, data: dict) -> None:
-        """Dynamically update agent progress fields and route llm tokens to text buffer."""
+        """Dynamically update agent progress fields (skipping raw llm tokens for JSON agents)."""
         agent_name = data.get("agent_name", "agent")
-
-        # Handle streaming LLM tokens
-        if "llm_token" in data:
-            self.append(data["llm_token"])
 
         # Mount or update the AgentProgressCard
         try:
@@ -654,19 +650,19 @@ class ChatLog(VerticalScroll):
             stream = StreamingMessage()
             await self.mount(stream)
             stream.finalize(content)
-            self.scroll_end(animate=True, duration=0.3)
+            self.app.call_after_refresh(self.auto_scroll)
             return stream
 
         widget = ChatMessage(role, content)
         await self.mount(widget)
-        self.scroll_end(animate=True, duration=0.3)
+        self.app.call_after_refresh(self.auto_scroll)
         return widget
 
     async def start_streaming(self) -> StreamingMessage:
         stream = StreamingMessage()
         self._active_stream = stream
         await self.mount(stream)
-        self.scroll_end(animate=True, duration=0.3)
+        self.app.call_after_refresh(self.auto_scroll)
         return stream
 
     def get_active_stream(self) -> StreamingMessage:

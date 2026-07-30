@@ -33,6 +33,14 @@ _TASK_PATTERNS = [
     r"\b(deploy|dockerize|containerize|publish|release)\b",
     r"\b(install|add)\s+(a\s+)?(package|dependency|library|module)\b",
     r"\b(create|add|generate|update|modify|change|rename)\s+(a\s+)?(class|function|method|endpoint|route|api|model|schema|migration|component|app|project|name)\b",
+    # Prototype / website / page requests
+    r"\b(prototype|mockup|boilerplate|starter|template)\b",
+    r"\b(website|webpage|web\s+page|landing\s+page|portfolio|dashboard|app|application)\b",
+    r"using\s+(html|css|react|vue|angular|svelte|javascript|typescript|python|node|express|django|flask)\b",
+    r"\b(simple|basic|minimal)\s+(car|blog|todo|shop|store|rental|booking|gallery|portfolio|login|signup|form)\b",
+    r"\b(html|css)\s+(and|&)\s+(css|javascript|js)\b",
+    r"\bindex\.html\b",
+    r"\b(styles?|stylesheet)\.css\b",
 ]
 
 # Keywords that strongly indicate conversational / explanatory intent

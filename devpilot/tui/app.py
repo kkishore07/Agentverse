@@ -256,6 +256,23 @@ class DevPilotApp(App[None]):
         bus.subscribe(EVENT_ERROR,          self._on_bus_error)
         bus.subscribe(EVENT_WARNING,        self._on_bus_warning)
         bus.subscribe("GitHubConfirmRequest", self._on_github_confirm_request)
+        
+        from core.event_bus import EVENT_AGENT_APPROVAL_REQUEST
+        bus.subscribe(EVENT_AGENT_APPROVAL_REQUEST, self._on_agent_approval_request)
+
+    async def _on_agent_approval_request(self, event) -> None:
+        agent_name = event.data.get("agent_name", "Agent")
+        task_desc = event.data.get("task_desc", "")
+        content = event.data.get("content", "")
+        language = event.data.get("language", "json")
+        future = event.data.get("future")
+        
+        from tui.screens.approval_screen import AgentApprovalScreen
+        def on_close(result_content: str | None):
+            if future and not future.done():
+                future.set_result(result_content)
+                
+        self.push_screen(AgentApprovalScreen(agent_name, task_desc, content, language), on_close)
 
     async def _on_github_confirm_request(self, event) -> None:
         from tui.screens.commit_screen import CommitConfirmationScreen
@@ -510,12 +527,14 @@ class DevPilotApp(App[None]):
 
         def on_token(token: str) -> None:
             streaming.append(token)
-            chat_log.scroll_end(animate=False)
+            self.call_after_refresh(chat_log.snap_scroll)
 
         full_response = await self.backend.chat_engine.respond_stream(text, on_token=on_token)
         streaming.finalize(full_response)
+        self.call_after_refresh(chat_log.auto_scroll)
 
         status.status_text = "Ready"
+
 
     async def _run_task(self, goal: str) -> None:
         from core.orchestrator import Orchestrator

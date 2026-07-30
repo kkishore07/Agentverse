@@ -215,6 +215,34 @@ class Orchestrator:
             lambda: agent.run(PlannerInput(goal=context.goal, context_files=list(state.generated_files)))
         )
         if plan:
+            # HITL Approval
+            import json
+            plan_dict = {"project": plan.project_name, "tasks": plan.tasks}
+            plan_json = json.dumps(plan_dict, indent=2)
+            
+            approved_json = await self._await_approval(
+                "Planner", 
+                "Review the proposed Project Plan and Tasks", 
+                plan_json, 
+                language="json"
+            )
+            
+            if not approved_json:
+                context.metadata["critical_error"] = "Planner execution was rejected by the user."
+                plan = None
+            else:
+                try:
+                    approved_data = json.loads(approved_json)
+                    from dataclasses import replace
+                    plan = replace(
+                        plan,
+                        project_name=approved_data.get("project", plan.project_name),
+                        tasks=approved_data.get("tasks", plan.tasks)
+                    )
+                except Exception as e:
+                    self._emit(EVENT_WARNING, message=f"Failed to apply plan edits: {e}")
+                    
+        if plan:
             context.project_name = plan.project_name
             context.tasks = plan.tasks
             self._emit(EVENT_AGENT_STEP, agent_name="Planner", step=f"Project: {plan.project_name}")
@@ -240,6 +268,43 @@ class Orchestrator:
                 ArchitectInput(goal=context.goal, tasks=context.tasks, max_files=self._max_files)
             ),
         )
+        if architecture:
+            # HITL Approval
+            import json
+            arch_dict = {
+                "tech_stack": architecture.tech_stack,
+                "folders": architecture.folders,
+                "files": [{"path": f.path, "purpose": f.purpose, "type": f.type} for f in architecture.files]
+            }
+            arch_json = json.dumps(arch_dict, indent=2)
+            
+            approved_json = await self._await_approval(
+                "Architect", 
+                "Review the Tech Stack and File Manifest", 
+                arch_json, 
+                language="json"
+            )
+            
+            if not approved_json:
+                context.metadata["critical_error"] = "Architect execution was rejected by the user."
+                architecture = None
+            else:
+                try:
+                    approved_data = json.loads(approved_json)
+                    from agents.architect import FileSpec
+                    from dataclasses import replace
+                    architecture = replace(
+                        architecture,
+                        tech_stack=approved_data.get("tech_stack", architecture.tech_stack),
+                        folders=approved_data.get("folders", architecture.folders),
+                        files=[
+                            FileSpec(path=f.get("path",""), purpose=f.get("purpose",""), type=f.get("type","code")) 
+                            for f in approved_data.get("files", [])
+                        ]
+                    )
+                except Exception as e:
+                    self._emit(EVENT_WARNING, message=f"Failed to apply architect edits: {e}")
+
         if architecture:
             context.tech_stack = architecture.tech_stack
             context.planned_files = [{"path": f.path, "purpose": f.purpose, "type": f.type} for f in architecture.files]
@@ -288,6 +353,24 @@ class Orchestrator:
             )
 
             if result and result.content:
+                ext = spec['path'].split('.')[-1] if '.' in spec['path'] else "text"
+                lang = {"py": "python", "js": "javascript", "jsx": "javascript", "html": "html", "css": "css"}.get(ext, ext)
+                
+                approved_content = await self._await_approval(
+                    "Coder",
+                    f"Review generated code for {spec['path']}",
+                    result.content,
+                    language=lang
+                )
+                
+                if not approved_content:
+                    self._emit(EVENT_AGENT_STEP, agent_name="Coder", step=f"Rejected {spec['path']}")
+                    self._emit(EVENT_AGENT_FINISHED, agent_name="Coder")
+                    continue
+                    
+                from dataclasses import replace
+                result = replace(result, content=approved_content)
+                
                 action_type = "update" if existing_content is not None else "create"
                 artifact = FileArtifact(path=spec['path'], content=result.content, action=action_type)
                 try:
@@ -513,3 +596,20 @@ class Orchestrator:
         self._emit("Error", message=f"{agent_label} failed after retries: {last_error}")
         return None
 
+    async def _await_approval(self, agent_name: str, task_desc: str, content: str, language: str = "text") -> str | None:
+        """Pause pipeline and request human-in-the-loop approval."""
+        from core.event_bus import EVENT_AGENT_APPROVAL_REQUEST
+        
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        
+        self._bus.publish(
+            EVENT_AGENT_APPROVAL_REQUEST, 
+            agent_name=agent_name, 
+            task_desc=task_desc, 
+            content=content, 
+            language=language,
+            future=future
+        )
+        
+        return await future

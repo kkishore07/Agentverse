@@ -1,111 +1,97 @@
-from __future__ import annotations
-from typing import Callable, Any
+"""
+tui/screens/approval_screen.py
+==============================
+Human-in-the-Loop (HITL) Agent Approval Screen.
+Displays an agent's proposed plan, architecture, or code in a TextArea
+so the user can edit it before explicitly approving or rejecting it.
+"""
 
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Static, Markdown, Input
-
-from core.event_bus import ApprovalRequest, ApprovalAction
+from textual.widgets import Button, Label, TextArea
 
 
-class ApprovalScreen(ModalScreen[tuple[str, str]]):
-    """Generic modal screen for all human approvals."""
+class AgentApprovalScreen(ModalScreen[str | None]):
+    """Modal to review and optionally edit agent output before continuing."""
 
     DEFAULT_CSS = """
-    ApprovalScreen {
+    AgentApprovalScreen {
         align: center middle;
-        background: rgba(0, 0, 0, 0.8);
+        background: $background 80%;
     }
-    
-    #appr-container {
-        width: 80;
-        height: auto;
-        max-height: 40;
-        background: #090909;
-        border: solid #3B82F6;
+
+    #approval-container {
+        width: 90%;
+        height: 90%;
+        background: #161B22;
+        border: solid #30363D;
         padding: 1 2;
     }
-    
-    .appr-title {
-        color: #3B82F6;
+
+    #approval-header {
         text-style: bold;
+        color: #E6EDF3;
         margin-bottom: 1;
-        border-bottom: solid #2C2C2C;
-        padding-bottom: 1;
-    }
-    
-    .appr-subtitle {
-        color: #A5A5A5;
-        margin-bottom: 1;
+        text-align: center;
     }
 
-    #appr-details {
-        background: #111111;
-        border: solid #2C2C2C;
-        padding: 1;
+    #approval-textarea {
+        height: 1fr;
+        border: solid #2F81F7;
         margin-bottom: 1;
-        max-height: 15;
-        overflow-y: auto;
+        background: #0D1117;
+        color: #E6EDF3;
     }
 
-    #appr-feedback {
-        display: none;
-        margin-bottom: 1;
-    }
-
-    #appr-feedback.-visible {
-        display: block;
-    }
-
-    .appr-buttons {
+    #approval-buttons {
         height: 3;
-        align: right middle;
+        align: center middle;
     }
-    
-    .appr-btn {
-        margin-left: 1;
+
+    #btn-approve {
+        background: #238636;
+        color: white;
+        margin-right: 2;
+        border: none;
+    }
+
+    #btn-approve:hover {
+        background: #2EA043;
+    }
+
+    #btn-reject {
+        background: #DA3633;
+        color: white;
+        border: none;
+    }
+
+    #btn-reject:hover {
+        background: #F85149;
     }
     """
 
-    def __init__(self, request: ApprovalRequest) -> None:
-        self.request = request
-        self._editing = False
+    def __init__(self, agent_name: str, task_desc: str, initial_content: str, language: str = "json") -> None:
         super().__init__()
+        self.agent_name = agent_name
+        self.task_desc = task_desc
+        self.initial_content = initial_content
+        self.language = language
 
     def compose(self) -> ComposeResult:
-        with Container(id="appr-container"):
-            yield Static(self.request.title, classes="appr-title")
+        with Vertical(id="approval-container"):
+            yield Label(f"{self.agent_name.capitalize()} Request: {self.task_desc}", id="approval-header")
             
-            if self.request.message:
-                yield Static(self.request.message, classes="appr-subtitle")
+            text_area = TextArea(self.initial_content, id="approval-textarea", language=self.language)
+            yield text_area
             
-            if self.request.details:
-                with VerticalScroll(id="appr-details"):
-                    yield Markdown(self.request.details)
-            
-            yield Input(placeholder="Enter feedback (e.g., 'Use PostgreSQL instead of SQLite')...", id="appr-feedback")
-
-            with Horizontal(classes="appr-buttons", id="appr-buttons-row"):
-                for action in self.request.actions:
-                    yield Button(action.label, variant=action.variant, id=f"btn-{action.id}", classes="appr-btn")
+            with Horizontal(id="approval-buttons"):
+                yield Button("✓ Approve & Continue", id="btn-approve")
+                yield Button("✗ Reject", id="btn-reject")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        action_id = event.button.id.replace("btn-", "") if event.button.id else ""
-        
-        # If edit was clicked, and we aren't showing the input yet, show it
-        if action_id == "edit" and not self._editing:
-            self._editing = True
-            feedback_input = self.query_one("#appr-feedback", Input)
-            feedback_input.add_class("-visible")
-            feedback_input.focus()
-            
-            # Change the button to say "Submit Feedback"
-            event.button.label = "Submit Feedback"
-            return
-            
-        feedback_val = ""
-        if self._editing:
-            feedback_val = self.query_one("#appr-feedback", Input).value.strip()
-
-        self.dismiss((action_id, feedback_val))
+        if event.button.id == "btn-approve":
+            text_area = self.query_one("#approval-textarea", TextArea)
+            self.dismiss(text_area.text)
+        elif event.button.id == "btn-reject":
+            self.dismiss(None)

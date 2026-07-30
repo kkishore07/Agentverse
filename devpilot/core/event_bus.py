@@ -42,6 +42,10 @@ EVENT_FILE_CONFIRMED     = "FileConfirmed"   # ✓ file written, stats
 EVENT_CHAT_TOKEN         = "ChatToken"       # streaming chat token
 EVENT_CHAT_COMPLETE      = "ChatComplete"    # full response assembled
 
+# Approval events (HITL)
+EVENT_AGENT_APPROVAL_REQUEST = "AgentApprovalRequest"
+EVENT_AGENT_APPROVAL_RESPONSE = "AgentApprovalResponse"
+
 # Task lifecycle events
 EVENT_TASK_STARTED       = "TaskStarted"
 EVENT_TASK_COMPLETE      = "TaskComplete"    # final summary data
