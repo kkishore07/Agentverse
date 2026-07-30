@@ -1,8 +1,0 @@
-react
-@babel/core
-@babel/preset-env
-webpack
-webpack-cli
-webpack-dev-server
-jest
-@testing-library/react

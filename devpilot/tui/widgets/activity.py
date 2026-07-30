@@ -94,18 +94,22 @@ class ActivityLog(VerticalScroll):
         super().__init__(id="activity-log")
         self._panels: dict[str, AgentRunPanel] = {}
 
+    def auto_scroll(self) -> None:
+        if self.max_scroll_y - self.scroll_y <= 6:
+            self.scroll_end(animate=True, duration=0.2)
+
     async def start_agent(self, agent_name: str, icon: str = "⚙") -> None:
         self.add_class("-visible")
         panel = AgentRunPanel(agent_name, icon)
         self._panels[agent_name] = panel
         await self.mount(panel)
-        self.scroll_end(animate=False)
+        self.app.call_after_refresh(self.auto_scroll)
 
     def add_step(self, agent_name: str, step: str) -> None:
         panel = self._panels.get(agent_name)
         if panel is not None:
             panel.add_step(step)
-            self.scroll_end(animate=False)
+            self.app.call_after_refresh(self.auto_scroll)
 
     def finish_agent(self, agent_name: str, success: bool = True) -> None:
         panel = self._panels.get(agent_name)
