@@ -149,7 +149,9 @@ class Orchestrator:
                 if getattr(context, "project_name", None):
                     import re
                     slug = re.sub(r'[^a-z0-9]+', '-', context.project_name.lower()).strip('-') or "app"
-                    context.workspace_dir = self._workspace_dir / slug
+                    projects_dir = self._workspace_dir if self._workspace_dir.name == "projects" else (self._workspace_dir / "projects")
+                    projects_dir.mkdir(parents=True, exist_ok=True)
+                    context.workspace_dir = projects_dir / slug
                     context.workspace_dir.mkdir(parents=True, exist_ok=True)
                     ws_mgr = WorkspaceManager(context.workspace_dir, bus=self._bus)
             elif stage == "architect":
